@@ -93,7 +93,7 @@ export function AvailabilityCalendar({
   const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-full lg:max-w-5xl mx-auto">
       {heatmapData && (
         <div className="mb-4 flex items-center gap-4 text-sm flex-wrap">
           <span className="font-medium">{t("calendar.availability")}:</span>
@@ -115,10 +115,10 @@ export function AvailabilityCalendar({
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         <div
           ref={containerRef}
-          className="inline-block min-w-full border rounded-lg overflow-hidden"
-          style={{ minWidth: dates.length > 3 ? "800px" : "auto" }}
+          className="inline-block min-w-full border rounded-lg overflow-hidden [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px]"
+          style={{ minWidth: dates.length > 3 ? "720px" : "auto" }}
         >
-          <div className="grid" style={{ gridTemplateColumns: `60px repeat(${dates.length}, 1fr)` }}>
+          <div className="grid" style={{ gridTemplateColumns: `var(--time-col) repeat(${dates.length}, 1fr)` }}>
             <div className="bg-muted border-b border-r p-2 text-xs font-medium sticky left-0 z-10" />
             {dates.map((date, i) => (
               <div key={i} className="bg-muted border-b p-2 text-center text-xs font-medium">
@@ -132,7 +132,7 @@ export function AvailabilityCalendar({
 
             {hours.map((hour) => (
               <div key={hour} className="contents">
-                <div className="bg-muted border-r p-2 text-xs font-medium text-center sticky left-0 z-10">
+                <div className="bg-muted border-r p-1.5 lg:p-1 text-[10px] sm:text-xs font-medium text-center sticky left-0 z-10">
                   {hour.toString().padStart(2, "0")}:00
                 </div>
                 {dates.map((date, i) => {
@@ -144,7 +144,7 @@ export function AvailabilityCalendar({
                     <div
                       key={`${i}-${hour}`}
                       className={cn(
-                        "border-b border-r p-1 sm:p-2 cursor-pointer transition-colors min-h-[32px] sm:min-h-[40px]",
+                        "border-b border-r p-1 sm:p-1.5 lg:p-1 cursor-pointer transition-colors min-h-[28px] sm:min-h-[34px] lg:min-h-[28px]",
                         readOnly && "cursor-default",
                         !readOnly && "hover:bg-accent",
                         selected && !showHeatmap && "bg-primary/20 hover:bg-primary/30",
