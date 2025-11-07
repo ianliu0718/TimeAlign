@@ -45,21 +45,16 @@ export async function getEvent(eventId: string): Promise<Event | null> {
 export async function createParticipant(eventId: string, participant: Omit<Participant, "id" | "created_at">) {
   const supabase = createClient()
 
-  const participantId = Math.random().toString(36).substring(2, 15)
-
   const { data, error } = await supabase
     .from("participants")
     .insert({
-      id: participantId,
       event_id: eventId,
       name: participant.name,
       email: participant.email,
-      availability: JSON.stringify(
-        participant.availability.map((slot) => ({
-          date: slot.date.toISOString(),
-          hour: slot.hour,
-        })),
-      ),
+      availability: participant.availability.map((slot) => ({
+        date: slot.date.toISOString(),
+        hour: slot.hour,
+      })),
     })
     .select()
     .single()
@@ -82,11 +77,11 @@ export async function getParticipants(eventId: string): Promise<Participant[]> {
     return []
   }
 
-  return data.map((p) => ({
+  return data.map((p: any) => ({
     id: p.id,
     name: p.name,
     email: p.email,
-    availability: (typeof p.availability === "string" ? JSON.parse(p.availability) : p.availability).map(
+    availability: (Array.isArray(p.availability) ? p.availability : []).map(
       (slot: any) => ({
         date: new Date(slot.date),
         hour: slot.hour,
