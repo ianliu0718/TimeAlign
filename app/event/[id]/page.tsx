@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
-import { getEvent, getParticipants, createParticipant } from "@/lib/db"
+import { getEvent, getParticipants, upsertParticipant } from "@/lib/db"
 import { createClient } from "@/lib/supabase/client"
 import type { Event, Participant, TimeSlot } from "@/lib/types"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,8 @@ export default function EventPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [selectedSlots, setSelectedSlots] = useState<TimeSlot[]>([])
+  const [lockName, setLockName] = useState(false)
+  const [focusSlot, setFocusSlot] = useState<{ date: Date; hour: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const refreshTimer = useRef<NodeJS.Timeout | null>(null)
@@ -75,10 +77,18 @@ export default function EventPage() {
     if (!name.trim() || selectedSlots.length === 0) return
     setLoading(true)
     try {
-      await createParticipant(eventId, {
+      let token: string | undefined
+      const key = `lockToken:${eventId}:${name.trim()}`
+      if (lockName) {
+        token = localStorage.getItem(key) || crypto.randomUUID()
+        localStorage.setItem(key, token)
+      }
+      await upsertParticipant(eventId, {
         name: name.trim(),
         email: email.trim() || undefined,
         availability: selectedSlots,
+        lock: lockName,
+        token,
       })
       setName("")
       setEmail("")
@@ -89,7 +99,11 @@ export default function EventPage() {
       alert(t("common.success"))
     } catch (error) {
       console.error("[v0] Error submitting availability:", error)
-      alert(t("common.error"))
+      if ((error as Error).message === 'NAME_LOCKED') {
+        alert(t('event.nameLocked'))
+      } else {
+        alert(t("common.error"))
+      }
     } finally {
       setLoading(false)
     }
@@ -154,6 +168,7 @@ export default function EventPage() {
                 onSlotsChange={setSelectedSlots}
                 heatmapData={participants.length > 0 ? getHeatmapData() : undefined}
                 maxParticipants={participants.length}
+                onSlotFocus={(date, hour) => setFocusSlot({ date, hour })}
               />
             </Card>
 

@@ -1,5 +1,5 @@
 import { createClient } from "./supabase/client"
-import type { Event, Participant } from "./types"
+import type { Event, Participant, TimeSlot } from "./types"
 
 export async function createEvent(event: Omit<Event, "created_at">) {
   const supabase = createClient()
@@ -81,7 +81,8 @@ export async function getParticipants(eventId: string): Promise<Participant[]> {
     id: p.id,
     name: p.name,
     email: p.email,
-    availability: (Array.isArray(p.availability) ? p.availability : []).map(
+    locked: p.locked ?? false,
+    availability: (Array.isArray(p.availability) ? p.availability : (typeof p.availability === 'string' ? JSON.parse(p.availability) : [])).map(
       (slot: any) => ({
         date: new Date(slot.date),
         hour: slot.hour,
@@ -89,4 +90,52 @@ export async function getParticipants(eventId: string): Promise<Participant[]> {
     ),
     created_at: new Date(p.created_at),
   }))
+}
+
+export async function upsertParticipant(
+  eventId: string,
+  participant: { name: string; email?: string; availability: TimeSlot[]; lock?: boolean; token?: string },
+) {
+  const supabase = createClient()
+  const { data: existing, error: findErr } = await supabase
+    .from('participants')
+    .select('id, locked, auth_token')
+    .eq('event_id', eventId)
+    .eq('name', participant.name)
+    .maybeSingle()
+  if (findErr) throw findErr
+
+  const availability = participant.availability.map((s) => ({ date: s.date.toISOString(), hour: s.hour }))
+
+  if (!existing) {
+    const body: any = {
+      event_id: eventId,
+      name: participant.name,
+      email: participant.email,
+      availability,
+    }
+    if (participant.lock) {
+      body.locked = true
+      body.auth_token = participant.token || crypto.randomUUID()
+    }
+    const { data, error } = await supabase.from('participants').insert(body).select().single()
+    if (error) throw error
+    return data
+  }
+
+  if (existing.locked && existing.auth_token && existing.auth_token !== participant.token) {
+    throw new Error('NAME_LOCKED')
+  }
+
+  const updateBody: any = {
+    email: participant.email,
+    availability,
+  }
+  if (participant.lock) {
+    updateBody.locked = true
+    updateBody.auth_token = existing.auth_token || participant.token || crypto.randomUUID()
+  }
+  const { data, error } = await supabase.from('participants').update(updateBody).eq('id', existing.id).select().single()
+  if (error) throw error
+  return data
 }

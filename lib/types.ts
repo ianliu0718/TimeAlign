@@ -8,6 +8,7 @@ export interface Participant {
   name: string
   email?: string
   availability: TimeSlot[]
+  locked?: boolean
   created_at: Date
 }
 

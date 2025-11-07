@@ -15,6 +15,7 @@ interface AvailabilityCalendarProps {
   heatmapData?: Map<string, number>
   maxParticipants?: number
   readOnly?: boolean
+  onSlotFocus?: (date: Date, hour: number) => void
 }
 
 export function AvailabilityCalendar({
@@ -27,6 +28,7 @@ export function AvailabilityCalendar({
   heatmapData,
   maxParticipants = 1,
   readOnly = false,
+  onSlotFocus,
 }: AvailabilityCalendarProps) {
   const { t } = useLanguage()
   const [isDragging, setIsDragging] = useState(false)
@@ -71,6 +73,7 @@ export function AvailabilityCalendar({
     if (readOnly) return
     setIsDragging(true)
     setDragStart({ date, hour })
+    onSlotFocus?.(date, hour)
     toggleSlot(date, hour)
   }
 
@@ -147,12 +150,13 @@ export function AvailabilityCalendar({
                         "border-b border-r p-1 sm:p-1.5 lg:p-1 cursor-pointer transition-colors min-h-[28px] sm:min-h-[34px] lg:min-h-[28px]",
                         readOnly && "cursor-default",
                         !readOnly && "hover:bg-accent",
-                        selected && !showHeatmap && "bg-primary/20 hover:bg-primary/30",
+                        selected && !showHeatmap && "bg-primary/60 md:bg-primary/40 hover:bg-primary/50 ring-2 ring-primary/80",
                         showHeatmap && "bg-green-500 hover:bg-green-600",
                       )}
                       style={showHeatmap ? { opacity: 0.2 + intensity * 0.8 } : undefined}
                       onMouseDown={() => handleMouseDown(date, hour)}
                       onMouseEnter={() => handleMouseEnter(date, hour)}
+                      onClick={() => onSlotFocus?.(date, hour)}
                     />
                   )
                 })}
@@ -161,6 +165,10 @@ export function AvailabilityCalendar({
           </div>
         </div>
       </div>
+      {/* Mobile selected count feedback */}
+      {selectedSlots.length > 0 && (
+        <div className="sm:hidden mt-2 text-xs text-primary font-medium">{t("event.selectedCount")}: {selectedSlots.length}</div>
+      )}
     </div>
   )
 }
