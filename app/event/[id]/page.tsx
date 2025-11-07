@@ -2,9 +2,11 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { getEvent, getParticipants, createParticipant } from "@/lib/db"
+import { createClient } from "@/lib/supabase/client"
 import type { Event, Participant, TimeSlot } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,70 +25,44 @@ export default function EventPage() {
 
   const [event, setEvent] = useState<Event | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [subscribed, setSubscribed] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [selectedSlots, setSelectedSlots] = useState<TimeSlot[]>([])
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const refreshTimer = useRef<NodeJS.Timeout | null>(null)
 
+  // Supabase Realtime 訂閱 participants 表
   useEffect(() => {
-    // try localStorage first
-    let parsed: any | null = null
-    const eventData = typeof window !== 'undefined' ? localStorage.getItem(`event_${eventId}`) : null
-    if (eventData) {
-      parsed = JSON.parse(eventData)
-    } else {
-      // fallback to decode from URL param `d`
-      const d = searchParams.get('d')
-      if (d) {
-        try {
-          const json = decodeURIComponent(atob(d))
-          const compact = JSON.parse(json)
-          parsed = {
-            id: eventId,
-            title: compact.t,
-            description: compact.d,
-            start_date: compact.sd,
-            end_date: compact.ed,
-            start_hour: compact.sh,
-            end_hour: compact.eh,
-            timezone: compact.tz,
-            created_at: new Date().toISOString(),
-          }
-          localStorage.setItem(`event_${eventId}`, JSON.stringify(parsed))
-        } catch (e) {
-          console.warn('[v0] failed to parse shared payload', e)
-        }
+    let isMounted = true
+    async function fetchAll() {
+      const evt = await getEvent(eventId)
+      if (isMounted) setEvent(evt)
+      const parts = await getParticipants(eventId)
+      if (isMounted) setParticipants(parts)
+    }
+    fetchAll()
+    if (!subscribed) {
+      const supabase = createClient()
+      const channel = supabase.channel(`participants-${eventId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'participants',
+          filter: `event_id=eq.${eventId}`,
+        }, (payload) => {
+          fetchAll()
+        })
+        .subscribe()
+      setSubscribed(true)
+      return () => {
+        channel.unsubscribe()
+        isMounted = false
       }
     }
-
-    if (parsed) {
-      // if start/end not present but selected_dates present, derive
-      const startISO = parsed.start_date || (parsed.selected_dates?.length ? parsed.selected_dates[0] : undefined)
-      const endISO = parsed.end_date || (parsed.selected_dates?.length ? parsed.selected_dates[parsed.selected_dates.length - 1] : undefined)
-      setEvent({
-        ...parsed,
-        start_date: startISO ? new Date(startISO) : new Date(),
-        end_date: endISO ? new Date(endISO) : new Date(),
-        created_at: parsed.created_at ? new Date(parsed.created_at) : new Date(),
-      })
-    }
-
-    const participantsData = localStorage.getItem(`participants_${eventId}`)
-    if (participantsData) {
-      const parsed = JSON.parse(participantsData)
-      setParticipants(
-        parsed.map((p: any) => ({
-          ...p,
-          availability: p.availability.map((slot: any) => ({
-            date: new Date(slot.date),
-            hour: slot.hour,
-          })),
-          created_at: new Date(p.created_at),
-        })),
-      )
-    }
-  }, [eventId, searchParams])
+    return () => { isMounted = false }
+  }, [eventId, subscribed])
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href)
@@ -97,25 +73,19 @@ export default function EventPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || selectedSlots.length === 0) return
-
     setLoading(true)
-
     try {
-      const participant: Participant = {
-        id: Math.random().toString(36).substring(2, 15),
+      await createParticipant(eventId, {
         name: name.trim(),
         email: email.trim() || undefined,
         availability: selectedSlots,
-        created_at: new Date(),
-      }
-
-      const newParticipants = [...participants, participant]
-      setParticipants(newParticipants)
-      localStorage.setItem(`participants_${eventId}`, JSON.stringify(newParticipants))
-
+      })
       setName("")
       setEmail("")
       setSelectedSlots([])
+      // 送出後立即刷新
+      const parts = await getParticipants(eventId)
+      setParticipants(parts)
       alert(t("common.success"))
     } catch (error) {
       console.error("[v0] Error submitting availability:", error)
