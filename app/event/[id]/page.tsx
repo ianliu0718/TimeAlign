@@ -109,10 +109,12 @@ export default function EventPage() {
     }
   }
 
+  
+
   const getHeatmapData = () => {
-    const heatmap = new Map<string, number>()
-    participants.forEach((participant) => {
-      participant.availability.forEach((slot) => {
+    const heatmap: Map<string, number> = new Map()
+    participants.forEach((participant: Participant) => {
+      participant.availability.forEach((slot: TimeSlot) => {
         const key = `${slot.date.toISOString().split("T")[0]}-${slot.hour}`
         heatmap.set(key, (heatmap.get(key) || 0) + 1)
       })
@@ -172,6 +174,41 @@ export default function EventPage() {
               />
             </Card>
 
+            {focusSlot && (
+              <Card className="p-4 sm:p-6">
+                <h3 className="text-sm sm:text-base font-semibold mb-2">
+                  {t("event.slotInfo")} {`${focusSlot.date.getMonth() + 1}/${focusSlot.date.getDate()} ${focusSlot.hour.toString().padStart(2, '0')}:00`}
+                </h3>
+                {(() => {
+                  const key = `${focusSlot.date.toISOString().split('T')[0]}-${focusSlot.hour}`
+                  const available = participants.filter((p: Participant) => p.availability.some((s: TimeSlot) => `${s.date.toISOString().split('T')[0]}-${s.hour}` === key))
+                  const unavailable = participants.filter((p: Participant) => !available.includes(p))
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="font-medium mb-1 text-green-600">{t("event.available")}</div>
+                        <ul className="list-disc pl-5">
+                          {available.length === 0 && <li className="text-muted-foreground">{t("event.none")}</li>}
+                          {available.map((p: Participant) => (
+                            <li key={p.id}>{p.name}{p.locked ? ' 🔒' : ''}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="font-medium mb-1 text-red-600">{t("event.unavailable")}</div>
+                        <ul className="list-disc pl-5">
+                          {unavailable.length === 0 && <li className="text-muted-foreground">{t("event.none")}</li>}
+                          {unavailable.map((p: Participant) => (
+                            <li key={p.id}>{p.name}{p.locked ? ' 🔒' : ''}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </Card>
+            )}
+
             <Card className="p-4 sm:p-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -185,6 +222,16 @@ export default function EventPage() {
                       required
                       className="text-base"
                     />
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="lockName"
+                        type="checkbox"
+                        checked={lockName}
+                        onChange={(e) => setLockName(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="lockName" className="text-xs text-muted-foreground">{t("event.lockName")}</Label>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">{t("event.yourEmail")}</Label>
