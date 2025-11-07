@@ -182,24 +182,32 @@ export function AvailabilityCalendar({
                   const selected = isSlotSelected(date, hour)
                   const intensity = getHeatmapIntensity(date, hour)
                   const showHeatmap = heatmapData && intensity > 0
+                  const hasOverlap = selected && showHeatmap  // 自己選取且有他人也選
 
                   return (
                     <div
                       key={`${i}-${hour}`}
                       className={cn(
-                        "border-b border-r p-1 sm:p-1.5 lg:p-1 cursor-pointer transition-colors min-h-[28px] sm:min-h-[34px] lg:min-h-[28px]",
+                        "border-b border-r p-1 sm:p-1.5 lg:p-1 cursor-pointer transition-colors min-h-[28px] sm:min-h-[34px] lg:min-h-[28px] relative",
                         readOnly && "cursor-default",
                         !readOnly && "hover:bg-accent",
                         selected && !showHeatmap && "bg-primary/60 md:bg-primary/40 hover:bg-primary/50 ring-2 ring-primary/80",
-                        showHeatmap && "bg-green-500 hover:bg-green-600",
+                        showHeatmap && !selected && "bg-green-500 hover:bg-green-600",
+                        hasOverlap && "bg-gradient-to-br from-primary/70 to-green-500/70 ring-2 ring-primary ring-offset-1"
                       )}
-                      style={showHeatmap ? { opacity: 0.2 + intensity * 0.8 } : undefined}
+                      style={showHeatmap && !selected ? { opacity: 0.2 + intensity * 0.8 } : undefined}
                       data-date-idx={i}
                       data-hour={hour}
                       onMouseDown={() => handleMouseDown(date, hour)}
                       onMouseEnter={() => handleMouseEnter(date, hour)}
                       onClick={() => onSlotFocus?.(date, hour)}
-                    />
+                    >
+                      {hasOverlap && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <span className="text-xs sm:text-sm font-bold text-white drop-shadow-lg">✓</span>
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>

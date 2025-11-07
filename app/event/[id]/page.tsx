@@ -30,6 +30,7 @@ export default function EventPage() {
   const [email, setEmail] = useState("")
   const [selectedSlots, setSelectedSlots] = useState<TimeSlot[]>([])
   const [lockName, setLockName] = useState(false)
+  const [password, setPassword] = useState("")
   const [focusSlot, setFocusSlot] = useState<{ date: Date; hour: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -75,24 +76,27 @@ export default function EventPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || selectedSlots.length === 0) return
+    
+    // 如果要鎖定名稱但未輸入密碼
+    if (lockName && !password.trim()) {
+      alert(t("event.passwordRequired"))
+      return
+    }
+    
     setLoading(true)
     try {
-      let token: string | undefined
-      const key = `lockToken:${eventId}:${name.trim()}`
-      if (lockName) {
-        token = localStorage.getItem(key) || crypto.randomUUID()
-        localStorage.setItem(key, token)
-      }
       await upsertParticipant(eventId, {
         name: name.trim(),
         email: email.trim() || undefined,
         availability: selectedSlots,
         lock: lockName,
-        token,
+        password: lockName ? password.trim() : undefined,
       })
       setName("")
       setEmail("")
+      setPassword("")
       setSelectedSlots([])
+      setLockName(false)
       // 送出後立即刷新
       const parts = await getParticipants(eventId)
       setParticipants(parts)
@@ -230,8 +234,21 @@ export default function EventPage() {
                         onChange={(e) => setLockName(e.target.checked)}
                         className="h-4 w-4"
                       />
-                      <Label htmlFor="lockName" className="text-xs text-muted-foreground">{t("event.lockName")}</Label>
+                      <Label htmlFor="lockName" className="text-xs text-muted-foreground cursor-pointer">{t("event.lockName")}</Label>
                     </div>
+                    {lockName && (
+                      <div className="mt-2">
+                        <Input
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder={t("event.enterPassword")}
+                          className="text-sm"
+                          required={lockName}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">{t("event.passwordPrompt")}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">{t("event.yourEmail")}</Label>

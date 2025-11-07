@@ -94,7 +94,7 @@ export async function getParticipants(eventId: string): Promise<Participant[]> {
 
 export async function upsertParticipant(
   eventId: string,
-  participant: { name: string; email?: string; availability: TimeSlot[]; lock?: boolean; token?: string },
+  participant: { name: string; email?: string; availability: TimeSlot[]; lock?: boolean; password?: string },
 ) {
   const supabase = createClient()
   const { data: existing, error: findErr } = await supabase
@@ -108,32 +108,38 @@ export async function upsertParticipant(
   const availability = participant.availability.map((s) => ({ date: s.date.toISOString(), hour: s.hour }))
 
   if (!existing) {
+    // 新參與者
     const body: any = {
       event_id: eventId,
       name: participant.name,
       email: participant.email,
       availability,
     }
-    if (participant.lock) {
+    if (participant.lock && participant.password) {
       body.locked = true
-      body.auth_token = participant.token || crypto.randomUUID()
+      body.auth_token = participant.password  // 直接使用使用者輸入的密碼
     }
     const { data, error } = await supabase.from('participants').insert(body).select().single()
     if (error) throw error
     return data
   }
 
-  if (existing.locked && existing.auth_token && existing.auth_token !== participant.token) {
-    throw new Error('NAME_LOCKED')
+  // 已存在的參與者：檢查是否鎖定
+  if (existing.locked && existing.auth_token) {
+    // 驗證密碼
+    if (!participant.password || existing.auth_token !== participant.password) {
+      throw new Error('NAME_LOCKED')
+    }
   }
 
+  // 更新資料
   const updateBody: any = {
     email: participant.email,
     availability,
   }
-  if (participant.lock) {
+  if (participant.lock && participant.password) {
     updateBody.locked = true
-    updateBody.auth_token = existing.auth_token || participant.token || crypto.randomUUID()
+    updateBody.auth_token = participant.password
   }
   const { data, error } = await supabase.from('participants').update(updateBody).eq('id', existing.id).select().single()
   if (error) throw error
