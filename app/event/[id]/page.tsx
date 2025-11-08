@@ -29,7 +29,6 @@ export default function EventPage() {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [subscribed, setSubscribed] = useState(false)
   const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
   const [selectedSlots, setSelectedSlots] = useState<TimeSlot[]>([])
   const [lockName, setLockName] = useState(false)
   const [showQr, setShowQr] = useState(false)
@@ -37,8 +36,7 @@ export default function EventPage() {
   const [focusSlot, setFocusSlot] = useState<{ date: Date; hour: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [pushSupported, setPushSupported] = useState(false)
-  const [pushEnabled, setPushEnabled] = useState(false)
+  const [activityFeed, setActivityFeed] = useState<Array<{text:string; time:Date}>>([])
   const refreshTimer = useRef<NodeJS.Timeout | null>(null)
 
   // 已移除「長按拖曳 / 預覽提交」選項，統一採用即時拖曳提交行為
@@ -68,6 +66,18 @@ export default function EventPage() {
             if (payload.eventType === 'INSERT' && payload.new?.name) {
               toast({ title: t('common.update'), description: `${payload.new.name} ${t('event.submit')}` })
             }
+            // 活動動態列表（不需重新整理也能看到變更）
+            const now = new Date()
+            if (payload.eventType === 'INSERT') {
+              const n = payload.new?.name || '參與者'
+              setActivityFeed(prev => ([{ text: `${n} 已加入`, time: now }, ...prev]).slice(0, 30))
+            } else if (payload.eventType === 'UPDATE') {
+              const n = payload.new?.name || '參與者'
+              setActivityFeed(prev => ([{ text: `${n} 已更新可出席時段`, time: now }, ...prev]).slice(0, 30))
+            } else if (payload.eventType === 'DELETE') {
+              const n = payload.old?.name || '參與者'
+              setActivityFeed(prev => ([{ text: `${n} 已移除`, time: now }, ...prev]).slice(0, 30))
+            }
           } catch {}
         })
         .subscribe()
@@ -86,74 +96,11 @@ export default function EventPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // 檢查 Push 支援度並在載入時註冊 SW（若尚未註冊）
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
-      setPushSupported(true)
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (!reg) {
-          navigator.serviceWorker.register('/sw.js').catch(err => console.error('[SW] register failed', err))
-        }
-      })
-    }
-  }, [])
+  // 純 Realtime 模式：不再註冊或使用推播/Service Worker
 
-  async function enablePush() {
-    if (!pushSupported) return
-    try {
-      const perm = await Notification.requestPermission()
-      if (perm !== 'granted') {
-        alert(t('common.error') + ': 通知權限被拒絕')
-        return
-      }
-      const reg = await navigator.serviceWorker.ready
-      const existing = await reg.pushManager.getSubscription()
-      let sub = existing
-      if (!sub) {
-        // 從伺服端取得公鑰（自動產生或讀取）
-        const pkResp = await fetch('/api/push/public-key').then(r => r.json())
-        if (!pkResp.ok) {
-          alert('取得推播金鑰失敗: ' + pkResp.error)
-          return
-        }
-        const convertedKey = urlBase64ToUint8Array(pkResp.publicKey)
-        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedKey })
-      }
-      // 上傳 subscription 到後端
-      const subJson = sub.toJSON()
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: eventId,
-          subscription: subJson,
-        })
-      })
-        .then(r => r.json())
-        .then(resp => {
-          if (!resp.ok) {
-            console.warn('[Push] subscribe failed', resp.error)
-            alert('推播訂閱失敗: ' + resp.error)
-          } else {
-            setPushEnabled(true)
-          }
-        })
-    } catch (e: any) {
-      console.error('[Push] enable error', e)
-      alert('啟用推播失敗: ' + e.message)
-    }
-  }
+  // 移除推播相關函式（enablePush/urlBase64ToUint8Array）
 
-  function urlBase64ToUint8Array(base64String: string) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-    const rawData = window.atob(base64)
-    const outputArray = new Uint8Array(rawData.length)
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i)
-    }
-    return outputArray
-  }
+  // 不再提供手動測試與重設按鈕；若需要重設可重新載入 + 點啟用通知
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -169,31 +116,18 @@ export default function EventPage() {
     try {
       const { isNew } = await upsertParticipant(eventId, {
         name: name.trim(),
-        email: email.trim() || undefined,
         availability: selectedSlots,
         lock: lockName,
         password: lockName ? password.trim() : undefined,
       })
       setName("")
-      setEmail("")
       setPassword("")
       setSelectedSlots([])
       setLockName(false)
       // 送出後立即刷新
       const parts = await getParticipants(eventId)
       setParticipants(parts)
-      // Web Push 通知：新參與者加入時呼叫（不論是否填 email）
-      if (isNew) {
-        fetch('/api/push/notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            eventId: eventId,
-            title: `${t('app.name')} 更新`,
-            message: `${name.trim()} ${t('event.submit')}`
-          })
-        }).catch(err => console.warn('[Event] push notify error', err))
-      }
+      // 純 Realtime 模式：不再呼叫推播 API
       alert(t("common.success"))
     } catch (error) {
       console.error("[v0] Error submitting availability:", error)
@@ -259,15 +193,22 @@ export default function EventPage() {
             >
               {showQr ? t("event.hideQr") : t("event.showQr")}
             </Button>
-            {pushSupported && !pushEnabled && (
-              <Button variant="outline" size="sm" onClick={enablePush} className="w-full sm:w-auto bg-transparent">
-                啟用通知
-              </Button>
-            )}
-            {pushSupported && pushEnabled && (
-              <span className="text-xs text-green-600">已啟用推播</span>
-            )}
+            {/* 純 Realtime 模式：不顯示推播啟用/狀態 UI */}
           </div>
+          {/* 移除最新通知卡片（推播），保留下方活動動態（Realtime） */}
+          {activityFeed.length > 0 && (
+            <Card className="mt-4 p-4 border bg-background">
+              <h3 className="text-sm font-semibold mb-2">活動動態（即時）</h3>
+              <ul className="space-y-1 max-h-56 overflow-auto text-xs">
+                {activityFeed.map((a, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">{a.time.toLocaleTimeString()}</span>
+                    <span className="flex-1 truncate">{a.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           {showQr && (
             <div className="mt-4 p-4 border rounded-lg inline-block bg-muted/40">
               <p className="text-xs mb-2 font-medium text-muted-foreground">{t("event.qrTitle")}</p>
@@ -371,19 +312,7 @@ export default function EventPage() {
                       </div>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">{t("event.yourEmail")}</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder={t("event.yourEmailPlaceholder")}
-                      className="text-base"
-                    />
-                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">{t("event.emailNotice")}</p>
                 <Button
                   type="submit"
                   className="w-full text-base py-6"
@@ -404,3 +333,4 @@ export default function EventPage() {
     </div>
   )
 }
+ 

@@ -136,9 +136,14 @@ export async function upsertParticipant(
     const { data, error } = await supabase.from('participants').insert(body).select().single()
     if (!error) return { data, isNew: true }
 
-    // 若因唯一鍵衝突（例如 (event_id, name) unique）導致 409，轉為更新流程
+    // 若因唯一鍵衝突（(event_id, name) unique）導致 409，轉為更新流程
+    // 注意：同名稱可以在不同活動中使用，唯一性僅限於同一活動內
     const isConflict = (err: any) => err?.status === 409 || err?.code === '23505' || (typeof err?.message === 'string' && err.message.toLowerCase().includes('duplicate'))
+    const msg: string = (error?.message || '').toString()
     if (!isConflict(error)) throw error
+
+    // 約束名稱可能為 uniq_participant_per_event 或其他，檢查是否為該活動內的名稱衝突
+    // （此處不直接拋 NAME_LOCKED，而是讀取既有紀錄判斷是否有密碼保護）
 
     // 讀取既有紀錄並走既有更新邏輯
     const { data: exist2, error: findErr2 } = await supabase
@@ -148,7 +153,7 @@ export async function upsertParticipant(
       .eq('name', participant.name)
       .maybeSingle()
     if (findErr2) throw findErr2
-    if (!exist2) throw error
+  if (!exist2) throw error
 
     if (exist2.locked && exist2.auth_token) {
       if (!participant.password || exist2.auth_token !== participant.password) {

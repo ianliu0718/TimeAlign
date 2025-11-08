@@ -43,6 +43,8 @@ export async function POST(req: Request) {
     }
 
     let success = 0
+    const failed: Array<{ endpoint: string; error: string; statusCode?: number }> = []
+    const cleaned: string[] = []
     for (const s of subs as any[]) {
       const subscription = {
         endpoint: s.endpoint,
@@ -52,11 +54,31 @@ export async function POST(req: Request) {
         await sendWebPush(subscription, payload)
         success++
       } catch (e) {
-        console.warn('[push/notify] send failure:', (e as any).message)
+        const err: any = e
+        const statusCode = err?.statusCode
+        const msg = err?.message || 'unknown'
+        console.warn('[push/notify] send failure:', statusCode, msg)
+        failed.push({ endpoint: s.endpoint, error: msg, statusCode })
+        // 自動清理已失效的訂閱（404/410 Gone）
+        if (statusCode === 404 || statusCode === 410) {
+          try {
+            const del = await supabase
+              .from('push_subscriptions')
+              .delete()
+              .eq('endpoint', s.endpoint)
+            if (del.error) {
+              console.warn('[push/notify] cleanup delete error:', del.error)
+            } else {
+              cleaned.push(s.endpoint)
+            }
+          } catch (ce) {
+            console.warn('[push/notify] cleanup exception:', ce)
+          }
+        }
       }
     }
 
-    return NextResponse.json({ ok: true, delivered: success, total: subs.length })
+    return NextResponse.json({ ok: true, delivered: success, total: subs.length, failed, cleaned: cleaned.length })
   } catch (e: any) {
     console.error('[push/notify] API error:', e)
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })

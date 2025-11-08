@@ -31,10 +31,10 @@ export async function POST(req: Request) {
     if (participantId) row.participant_id = participantId
     if (tenantId) row.tenant_id = tenantId
 
-    // upsert 以 endpoint 為 unique 鍵
+    // upsert 以 (endpoint, event_id) 為 unique 鍵，允許同一裝置訂閱多個活動
     const { data, error } = await supabase
       .from('push_subscriptions')
-      .upsert(row, { onConflict: 'endpoint' })
+      .upsert(row, { onConflict: 'endpoint,event_id' })
       .select()
       .single()
 

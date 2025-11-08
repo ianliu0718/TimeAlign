@@ -13,7 +13,16 @@ self.addEventListener('push', (event) => {
       data: data.data || {},
       vibrate: [100, 50, 100],
     }
-    event.waitUntil(self.registration.showNotification(title, options))
+    // 同時向所有 clients 發送訊息，讓頁面可內嵌顯示
+    event.waitUntil((async () => {
+      try {
+        const all = await clients.matchAll({ includeUncontrolled: true, type: 'window' })
+        for (const c of all) {
+          c.postMessage({ type: 'push', payload: { title, body: options.body, data: options.data } })
+        }
+      } catch (e) {}
+      await self.registration.showNotification(title, options)
+    })())
   } catch (e) {
     // Fallback if payload is string
     const text = event.data ? event.data.text() : '新通知'
