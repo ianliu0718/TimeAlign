@@ -16,6 +16,7 @@ import { AvailabilityCalendar } from "@/components/availability-calendar"
 import { ParticipantList } from "@/components/participant-list"
 import { BestTimesList } from "@/components/best-times-list"
 import { Copy, Check } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
 import QRCode from "react-qr-code"
 
 export default function EventPage() {
@@ -28,7 +29,6 @@ export default function EventPage() {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [subscribed, setSubscribed] = useState(false)
   const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
   const [selectedSlots, setSelectedSlots] = useState<TimeSlot[]>([])
   const [lockName, setLockName] = useState(false)
   const [showQr, setShowQr] = useState(false)
@@ -36,7 +36,10 @@ export default function EventPage() {
   const [focusSlot, setFocusSlot] = useState<{ date: Date; hour: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [activityFeed, setActivityFeed] = useState<Array<{text:string; time:Date}>>([])
   const refreshTimer = useRef<NodeJS.Timeout | null>(null)
+
+  // 已移除「長按拖曳 / 預覽提交」選項，統一採用即時拖曳提交行為
 
   // Supabase Realtime 訂閱 participants 表
   useEffect(() => {
@@ -56,8 +59,26 @@ export default function EventPage() {
           schema: 'public',
           table: 'participants',
           filter: `event_id=eq.${eventId}`,
-        }, (payload) => {
+        }, (payload: any) => {
+          // 即時更新 + 若為新增參與者顯示 Toast
           fetchAll()
+          try {
+            if (payload.eventType === 'INSERT' && payload.new?.name) {
+              toast({ title: t('common.update'), description: `${payload.new.name} ${t('event.submit')}` })
+            }
+            // 活動動態列表（不需重新整理也能看到變更）
+            const now = new Date()
+            if (payload.eventType === 'INSERT') {
+              const n = payload.new?.name || '參與者'
+              setActivityFeed(prev => ([{ text: `${n} 已加入`, time: now }, ...prev]).slice(0, 30))
+            } else if (payload.eventType === 'UPDATE') {
+              const n = payload.new?.name || '參與者'
+              setActivityFeed(prev => ([{ text: `${n} 已更新可出席時段`, time: now }, ...prev]).slice(0, 30))
+            } else if (payload.eventType === 'DELETE') {
+              const n = payload.old?.name || '參與者'
+              setActivityFeed(prev => ([{ text: `${n} 已移除`, time: now }, ...prev]).slice(0, 30))
+            }
+          } catch {}
         })
         .subscribe()
       setSubscribed(true)
@@ -75,6 +96,12 @@ export default function EventPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // 純 Realtime 模式：不再註冊或使用推播/Service Worker
+
+  // 移除推播相關函式（enablePush/urlBase64ToUint8Array）
+
+  // 不再提供手動測試與重設按鈕；若需要重設可重新載入 + 點啟用通知
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || selectedSlots.length === 0) return
@@ -87,21 +114,20 @@ export default function EventPage() {
     
     setLoading(true)
     try {
-      await upsertParticipant(eventId, {
+      const { isNew } = await upsertParticipant(eventId, {
         name: name.trim(),
-        email: email.trim() || undefined,
         availability: selectedSlots,
         lock: lockName,
         password: lockName ? password.trim() : undefined,
       })
       setName("")
-      setEmail("")
       setPassword("")
       setSelectedSlots([])
       setLockName(false)
       // 送出後立即刷新
       const parts = await getParticipants(eventId)
       setParticipants(parts)
+      // 純 Realtime 模式：不再呼叫推播 API
       alert(t("common.success"))
     } catch (error) {
       console.error("[v0] Error submitting availability:", error)
@@ -167,7 +193,22 @@ export default function EventPage() {
             >
               {showQr ? t("event.hideQr") : t("event.showQr")}
             </Button>
+            {/* 純 Realtime 模式：不顯示推播啟用/狀態 UI */}
           </div>
+          {/* 移除最新通知卡片（推播），保留下方活動動態（Realtime） */}
+          {activityFeed.length > 0 && (
+            <Card className="mt-4 p-4 border bg-background">
+              <h3 className="text-sm font-semibold mb-2">活動動態（即時）</h3>
+              <ul className="space-y-1 max-h-56 overflow-auto text-xs">
+                {activityFeed.map((a, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">{a.time.toLocaleTimeString()}</span>
+                    <span className="flex-1 truncate">{a.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           {showQr && (
             <div className="mt-4 p-4 border rounded-lg inline-block bg-muted/40">
               <p className="text-xs mb-2 font-medium text-muted-foreground">{t("event.qrTitle")}</p>
@@ -181,8 +222,10 @@ export default function EventPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
             <Card className="p-4 sm:p-6">
-              <h2 className="text-lg sm:text-xl font-semibold mb-4">{t("event.markAvailability")}</h2>
-              <p className="text-xs sm:text-sm text-muted-foreground mb-4">{t("event.clickDrag")}</p>
+              <h2 className="text-lg sm:text-xl font-semibold mb-2">{t("event.markAvailability")}</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground mb-3">{t("event.clickDrag")}</p>
+
+
               <AvailabilityCalendar
                 startDate={event.start_date}
                 endDate={event.end_date}
@@ -269,19 +312,7 @@ export default function EventPage() {
                       </div>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">{t("event.yourEmail")}</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder={t("event.yourEmailPlaceholder")}
-                      className="text-base"
-                    />
-                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">{t("event.emailNotice")}</p>
                 <Button
                   type="submit"
                   className="w-full text-base py-6"
@@ -294,11 +325,12 @@ export default function EventPage() {
           </div>
 
           <div className="space-y-6">
-            <ParticipantList participants={participants} />
             <BestTimesList participants={participants} startHour={event.start_hour} endHour={event.end_hour} />
+            <ParticipantList participants={participants} />
           </div>
         </div>
       </div>
     </div>
   )
 }
+ 

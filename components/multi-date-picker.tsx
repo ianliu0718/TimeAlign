@@ -47,6 +47,16 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
   const originSelectionRef = useRef<Date[]>([])
   const hasDragged = useRef(false)  // 追蹤是否真的拖曳過
 
+  // 手機觸控拖曳支援
+  const getCellIndexFromPoint = (clientX: number, clientY: number): number | null => {
+    const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+    if (!el) return null
+    const cell = el.closest('[data-date-index]') as HTMLElement | null
+    if (!cell) return null
+    const idx = Number(cell.getAttribute('data-date-index'))
+    return Number.isNaN(idx) ? null : idx
+  }
+
   const toggleDate = (date: Date) => {
     const dateWithoutTime = new Date(date)
     dateWithoutTime.setHours(0, 0, 0, 0)
@@ -99,6 +109,30 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
     onChange(uniqByDay([...originSelectionRef.current, ...range]).sort((a, b) => a.getTime() - b.getTime()))
   }
 
+  // Pointer 事件（支援觸控與滑鼠）
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>, index: number) => {
+    handleMouseDown(index)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || dragStartIndex.current === null) return
+    const idx = getCellIndexFromPoint(e.clientX, e.clientY)
+    if (idx !== null && idx !== dragStartIndex.current) {
+      hasDragged.current = true
+      const start = Math.min(dragStartIndex.current, idx)
+      const end = Math.max(dragStartIndex.current, idx)
+      const range = dates.slice(start, end + 1).filter((d) => !isBefore(d, today))
+      onChange(uniqByDay([...originSelectionRef.current, ...range]).sort((a, b) => a.getTime() - b.getTime()))
+    }
+  }
+
+  const handlePointerUp = () => {
+    if (isDragging) {
+      setIsDragging(false)
+      dragStartIndex.current = null
+    }
+  }
+
   useEffect(() => {
     const onUp = () => {
       if (isDragging) {
@@ -107,7 +141,11 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
       }
     }
     window.addEventListener('mouseup', onUp)
-    return () => window.removeEventListener('mouseup', onUp)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('pointerup', onUp)
+    }
   }, [isDragging])
 
   return (
@@ -183,7 +221,7 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
           </div>
 
           {/* Date cells - 5 weeks */}
-          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 touch-none" onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
             {dates.map((date, index) => {
               const isSelected = value.some((d) => isSameDay(d, date))
               const isPast = isBefore(date, today)
@@ -193,8 +231,10 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
                 <button
                   key={index}
                   type="button"
+                  data-date-index={index}
                   onMouseDown={() => handleMouseDown(index)}
                   onMouseEnter={() => handleMouseEnter(index)}
+                  onPointerDown={(e) => handlePointerDown(e, index)}
                   onClick={() => {
                     if (!isPast && !hasDragged.current) {
                       toggleDate(date)

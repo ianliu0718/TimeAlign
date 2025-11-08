@@ -109,7 +109,7 @@ export async function getParticipants(eventId: string): Promise<Participant[]> {
 export async function upsertParticipant(
   eventId: string,
   participant: { name: string; email?: string; availability: TimeSlot[]; lock?: boolean; password?: string },
-) {
+): Promise<{ data: any; isNew: boolean }> {
   const supabase = createClient()
   const { data: existing, error: findErr } = await supabase
     .from('participants')
@@ -134,8 +134,43 @@ export async function upsertParticipant(
       body.auth_token = participant.password  // 直接使用使用者輸入的密碼
     }
     const { data, error } = await supabase.from('participants').insert(body).select().single()
-    if (error) throw error
-    return data
+    if (!error) return { data, isNew: true }
+
+    // 若因唯一鍵衝突（(event_id, name) unique）導致 409，轉為更新流程
+    // 注意：同名稱可以在不同活動中使用，唯一性僅限於同一活動內
+    const isConflict = (err: any) => err?.status === 409 || err?.code === '23505' || (typeof err?.message === 'string' && err.message.toLowerCase().includes('duplicate'))
+    const msg: string = (error?.message || '').toString()
+    if (!isConflict(error)) throw error
+
+    // 約束名稱可能為 uniq_participant_per_event 或其他，檢查是否為該活動內的名稱衝突
+    // （此處不直接拋 NAME_LOCKED，而是讀取既有紀錄判斷是否有密碼保護）
+
+    // 讀取既有紀錄並走既有更新邏輯
+    const { data: exist2, error: findErr2 } = await supabase
+      .from('participants')
+      .select('id, locked, auth_token')
+      .eq('event_id', eventId)
+      .eq('name', participant.name)
+      .maybeSingle()
+    if (findErr2) throw findErr2
+  if (!exist2) throw error
+
+    if (exist2.locked && exist2.auth_token) {
+      if (!participant.password || exist2.auth_token !== participant.password) {
+        throw new Error('NAME_LOCKED')
+      }
+    }
+    const updateBody: any = {
+      email: participant.email,
+      availability,
+    }
+    if (participant.lock && participant.password) {
+      updateBody.locked = true
+      updateBody.auth_token = participant.password
+    }
+    const { data: upd, error: updErr } = await supabase.from('participants').update(updateBody).eq('id', exist2.id).select().single()
+    if (updErr) throw updErr
+    return { data: upd, isNew: false }
   }
 
   // 已存在的參與者：檢查是否鎖定
@@ -157,5 +192,5 @@ export async function upsertParticipant(
   }
   const { data, error } = await supabase.from('participants').update(updateBody).eq('id', existing.id).select().single()
   if (error) throw error
-  return data
+  return { data, isNew: false }
 }
