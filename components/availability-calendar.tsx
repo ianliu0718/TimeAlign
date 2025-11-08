@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 interface AvailabilityCalendarProps {
   startDate: Date
   endDate: Date
+  selectedDates?: Date[]  // 不連續日期（優先使用）
   startHour: number
   endHour: number
   selectedSlots: TimeSlot[]
@@ -21,6 +22,7 @@ interface AvailabilityCalendarProps {
 export function AvailabilityCalendar({
   startDate,
   endDate,
+  selectedDates,
   startHour,
   endHour,
   selectedSlots,
@@ -35,12 +37,18 @@ export function AvailabilityCalendar({
   const [dragStart, setDragStart] = useState<{ date: Date; hour: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const dates: Date[] = []
-  const currentDate = new Date(startDate)
-  while (currentDate <= endDate) {
-    dates.push(new Date(currentDate))
-    currentDate.setDate(currentDate.getDate() + 1)
-  }
+  // 優先使用 selectedDates，否則用 startDate 到 endDate 的連續日期
+  const dates: Date[] = selectedDates && selectedDates.length > 0 
+    ? selectedDates.map(d => new Date(d)).sort((a, b) => a.getTime() - b.getTime())
+    : (() => {
+        const result: Date[] = []
+        const currentDate = new Date(startDate)
+        while (currentDate <= endDate) {
+          result.push(new Date(currentDate))
+          currentDate.setDate(currentDate.getDate() + 1)
+        }
+        return result
+      })()
 
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i)
 

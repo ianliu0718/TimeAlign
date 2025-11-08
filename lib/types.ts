@@ -18,6 +18,7 @@ export interface Event {
   description?: string
   start_date: Date
   end_date: Date
+  selected_dates?: Date[]  // 不連續的日期陣列（可選）
   start_hour: number
   end_hour: number
   timezone: string

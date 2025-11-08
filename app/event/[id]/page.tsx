@@ -168,6 +168,7 @@ export default function EventPage() {
               <AvailabilityCalendar
                 startDate={event.start_date}
                 endDate={event.end_date}
+                selectedDates={event.selected_dates}
                 startHour={event.start_hour}
                 endHour={event.end_hour}
                 selectedSlots={selectedSlots}

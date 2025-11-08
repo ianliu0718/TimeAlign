@@ -4,19 +4,26 @@ import type { Event, Participant, TimeSlot } from "./types"
 export async function createEvent(event: Omit<Event, "created_at">) {
   const supabase = createClient()
 
+  const insertData: any = {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    start_date: event.start_date.toISOString(),
+    end_date: event.end_date.toISOString(),
+    start_hour: event.start_hour,
+    end_hour: event.end_hour,
+    timezone: event.timezone,
+    duration: event.duration,
+  }
+
+  // 如果有不連續日期，儲存為 JSONB
+  if (event.selected_dates && event.selected_dates.length > 0) {
+    insertData.selected_dates = event.selected_dates.map(d => d.toISOString())
+  }
+
   const { data, error } = await supabase
     .from("events")
-    .insert({
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      start_date: event.start_date.toISOString(),
-      end_date: event.end_date.toISOString(),
-      start_hour: event.start_hour,
-      end_hour: event.end_hour,
-      timezone: event.timezone,
-      duration: event.duration,
-    })
+    .insert(insertData)
     .select()
     .single()
 
@@ -34,12 +41,19 @@ export async function getEvent(eventId: string): Promise<Event | null> {
     return null
   }
 
-  return {
+  const event: Event = {
     ...data,
     start_date: new Date(data.start_date),
     end_date: new Date(data.end_date),
     created_at: new Date(data.created_at),
   }
+
+  // 解析不連續日期（如果有的話）
+  if (data.selected_dates && Array.isArray(data.selected_dates)) {
+    event.selected_dates = data.selected_dates.map((d: string) => new Date(d))
+  }
+
+  return event
 }
 
 export async function createParticipant(eventId: string, participant: Omit<Participant, "id" | "created_at">) {
