@@ -38,6 +38,16 @@ export default function EventPage() {
   const [copied, setCopied] = useState(false)
   const refreshTimer = useRef<NodeJS.Timeout | null>(null)
 
+  // 互動偏好（localStorage 持久化）
+  const [longPress, setLongPress] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('opt.longPressToDrag') === '1'
+  })
+  const [previewMode, setPreviewMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('opt.previewBeforeCommit') === '1'
+  })
+
   // Supabase Realtime 訂閱 participants 表
   useEffect(() => {
     let isMounted = true
@@ -56,7 +66,7 @@ export default function EventPage() {
           schema: 'public',
           table: 'participants',
           filter: `event_id=eq.${eventId}`,
-        }, (payload) => {
+        }, (_payload: any) => {
           fetchAll()
         })
         .subscribe()
@@ -87,7 +97,7 @@ export default function EventPage() {
     
     setLoading(true)
     try {
-      await upsertParticipant(eventId, {
+      const { isNew } = await upsertParticipant(eventId, {
         name: name.trim(),
         email: email.trim() || undefined,
         availability: selectedSlots,
@@ -102,6 +112,18 @@ export default function EventPage() {
       // 送出後立即刷新
       const parts = await getParticipants(eventId)
       setParticipants(parts)
+      // 通知規則：只有新參與者加入才寄信（如果填 email）
+      if (isNew && email.trim()) {
+        fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: email.trim(),
+            subject: `${t('app.name')} - ${t('event.submit')}`,
+            html: `<p>${t('event.submit')}: ${event?.title || ''}</p>`
+          })
+        }).catch(() => {})
+      }
       alert(t("common.success"))
     } catch (error) {
       console.error("[v0] Error submitting availability:", error)
@@ -181,8 +203,31 @@ export default function EventPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
             <Card className="p-4 sm:p-6">
-              <h2 className="text-lg sm:text-xl font-semibold mb-4">{t("event.markAvailability")}</h2>
-              <p className="text-xs sm:text-sm text-muted-foreground mb-4">{t("event.clickDrag")}</p>
+              <h2 className="text-lg sm:text-xl font-semibold mb-2">{t("event.markAvailability")}</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground mb-3">{t("event.clickDrag")}</p>
+
+              {/* 互動選項：長按拖曳 / 預覽模式 */}
+              <div className="mb-3 flex flex-col sm:flex-row gap-2 sm:items-center text-xs sm:text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="opt-longpress"
+                    type="checkbox"
+                    checked={longPress}
+                    onChange={(e) => { setLongPress(e.target.checked); localStorage.setItem('opt.longPressToDrag', e.target.checked ? '1' : '0') }}
+                  />
+                  <label htmlFor="opt-longpress" className="cursor-pointer">{t('event.longPressToDrag')}</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="opt-preview"
+                    type="checkbox"
+                    checked={previewMode}
+                    onChange={(e) => { setPreviewMode(e.target.checked); localStorage.setItem('opt.previewBeforeCommit', e.target.checked ? '1' : '0') }}
+                  />
+                  <label htmlFor="opt-preview" className="cursor-pointer">{t('event.previewBeforeCommit')}</label>
+                </div>
+              </div>
+
               <AvailabilityCalendar
                 startDate={event.start_date}
                 endDate={event.end_date}
@@ -194,6 +239,9 @@ export default function EventPage() {
                 heatmapData={participants.length > 0 ? getHeatmapData() : undefined}
                 maxParticipants={participants.length}
                 onSlotFocus={(date, hour) => setFocusSlot({ date, hour })}
+                longPressToDrag={longPress}
+                previewBeforeCommit={previewMode}
+                longPressDelayMs={250}
               />
             </Card>
 

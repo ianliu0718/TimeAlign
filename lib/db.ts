@@ -109,7 +109,7 @@ export async function getParticipants(eventId: string): Promise<Participant[]> {
 export async function upsertParticipant(
   eventId: string,
   participant: { name: string; email?: string; availability: TimeSlot[]; lock?: boolean; password?: string },
-) {
+): Promise<{ data: any; isNew: boolean }> {
   const supabase = createClient()
   const { data: existing, error: findErr } = await supabase
     .from('participants')
@@ -135,7 +135,7 @@ export async function upsertParticipant(
     }
     const { data, error } = await supabase.from('participants').insert(body).select().single()
     if (error) throw error
-    return data
+    return { data, isNew: true }
   }
 
   // 已存在的參與者：檢查是否鎖定
@@ -157,5 +157,5 @@ export async function upsertParticipant(
   }
   const { data, error } = await supabase.from('participants').update(updateBody).eq('id', existing.id).select().single()
   if (error) throw error
-  return data
+  return { data, isNew: false }
 }

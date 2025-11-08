@@ -25,8 +25,8 @@ export function ParticipantList({ participants }: ParticipantListProps) {
 
   return (
     <Card className="p-4 sm:p-6">
-      <h3 className="font-semibold text-lg mb-4">
-        {t("event.participants")} ({participants.length})
+      <h3 className="font-semibold text-lg mb-2">
+        {t("event.participants")}
       </h3>
       <div className="space-y-2">
         {participants.map((participant) => (
@@ -43,6 +43,9 @@ export function ParticipantList({ participants }: ParticipantListProps) {
             </div>
           </div>
         ))}
+      </div>
+      <div className="mt-3 text-xs text-muted-foreground">
+        {participants.length} {t("event.participants")}
       </div>
     </Card>
   )

@@ -93,9 +93,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "event.passwordPrompt": "Enter password to lock this name:",
     "event.passwordRequired": "Password required",
     "event.enterPassword": "Enter password",
-  "event.showQr": "Show QR Code",
-  "event.hideQr": "Hide QR Code",
-  "event.qrTitle": "Scan to open on mobile",
+    "event.showQr": "Show QR Code",
+    "event.hideQr": "Hide QR Code",
+    "event.qrTitle": "Scan to open on mobile",
+    "event.longPressToDrag": "Long press to start drag",
+    "event.previewBeforeCommit": "Preview selection (commit on release)",
 
     // Calendar
     "calendar.sun": "Sun",
@@ -257,9 +259,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "event.passwordPrompt": "輸入密碼以鎖定此名稱：",
     "event.passwordRequired": "需要密碼",
     "event.enterPassword": "輸入密碼",
-  "event.showQr": "顯示 QR Code",
-  "event.hideQr": "隱藏 QR Code",
-  "event.qrTitle": "手機掃描快速開啟",
+    "event.showQr": "顯示 QR Code",
+    "event.hideQr": "隱藏 QR Code",
+    "event.qrTitle": "手機掃描快速開啟",
+    "event.longPressToDrag": "長按後才進入拖曳",
+    "event.previewBeforeCommit": "拖曳中顯示預覽，放手才提交",
 
     // Calendar
     "calendar.sun": "日",
@@ -421,9 +425,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "event.passwordPrompt": "Ingrese contraseña para bloquear este nombre:",
     "event.passwordRequired": "Contraseña requerida",
     "event.enterPassword": "Ingrese contraseña",
-  "event.showQr": "Mostrar QR",
-  "event.hideQr": "Ocultar QR",
-  "event.qrTitle": "Escanear para abrir en móvil",
+    "event.showQr": "Mostrar QR",
+    "event.hideQr": "Ocultar QR",
+    "event.qrTitle": "Escanear para abrir en móvil",
+    "event.longPressToDrag": "Mantener presionado para arrastrar",
+    "event.previewBeforeCommit": "Previsualizar (aplicar al soltar)",
 
     // Calendar
     "calendar.sun": "Dom",
@@ -588,9 +594,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "event.passwordPrompt": "Maglagay ng password para i-lock ang pangalang ito:",
     "event.passwordRequired": "Kinakailangan ang password",
     "event.enterPassword": "Maglagay ng password",
-  "event.showQr": "Ipakita ang QR",
-  "event.hideQr": "Itago ang QR",
-  "event.qrTitle": "I-scan para buksan sa mobile",
+    "event.showQr": "Ipakita ang QR",
+    "event.hideQr": "Itago ang QR",
+    "event.qrTitle": "I-scan para buksan sa mobile",
+    "event.longPressToDrag": "Matagal na pindot bago mag-drag",
+    "event.previewBeforeCommit": "I-preview muna, apply kapag binitawan",
 
     // Calendar
     "calendar.sun": "Lin",
@@ -755,9 +763,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "event.passwordPrompt": "Masukkan kata sandi untuk mengunci nama ini:",
     "event.passwordRequired": "Kata sandi diperlukan",
     "event.enterPassword": "Masukkan kata sandi",
-  "event.showQr": "Tampilkan QR",
-  "event.hideQr": "Sembunyikan QR",
-  "event.qrTitle": "Pindai untuk buka di ponsel",
+    "event.showQr": "Tampilkan QR",
+    "event.hideQr": "Sembunyikan QR",
+    "event.qrTitle": "Pindai untuk buka di ponsel",
+    "event.longPressToDrag": "Tekan lama untuk mulai drag",
+    "event.previewBeforeCommit": "Pratinjau dulu, konfirmasi saat lepas",
 
     // Calendar
     "calendar.sun": "Min",
