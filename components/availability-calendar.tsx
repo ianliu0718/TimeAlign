@@ -61,6 +61,8 @@ export function AvailabilityCalendar({
   const awaitingLongPressRef = useRef(false)
   const touchStartPointRef = useRef<{ x: number; y: number } | null>(null)
   const touchStartHitRef = useRef<{ date: Date; hour: number } | null>(null)
+  // 追蹤拖曳啟動的時間點，用於偵測失效
+  const dragStartTimeRef = useRef<number>(0)
   // 避免行動裝置觸控結束後產生合成滑鼠事件，導致又被切換回去
   const ignoreMouseUntilRef = useRef<number>(0)
   
@@ -249,6 +251,9 @@ export function AvailabilityCalendar({
   const startDragAt = (date: Date, hour: number) => {
     if (readOnly) return
     
+    // 記錄拖曳啟動時間
+    dragStartTimeRef.current = Date.now()
+    
     // 先設置所有狀態
     isDraggingRef.current = true // 立即設置 ref
     setIsDragging(true)
@@ -414,6 +419,26 @@ export function AvailabilityCalendar({
     // 使用 ref 檢查拖曳狀態，立即生效
     // 關鍵：必須在最前面就檢查並阻止預設行為
     if (isDraggingRef.current) {
+      // 檢測拖曳是否失效（啟動後 100ms 內有大幅度移動可能表示滾動已開始）
+      const timeSinceDragStart = Date.now() - dragStartTimeRef.current
+      if (timeSinceDragStart < 100 && touchStartPointRef.current) {
+        const dx = Math.abs(e.clientX - touchStartPointRef.current.x)
+        const dy = Math.abs(e.clientY - touchStartPointRef.current.y)
+        // 如果短時間內移動超過 20px，可能是拖曳鎖定失敗
+        if (dx > 20 || dy > 20) {
+          // 立即取消拖曳模式
+          isDraggingRef.current = false
+          setIsDragging(false)
+          setDragStart(null)
+          dragModeRef.current = null
+          touchedCellsRef.current.clear()
+          stopAutoScroll()
+          setCurrentTouchAction('pan-x pan-y')
+          // 不清除 touchStart，讓系統可以正常滾動
+          return
+        }
+      }
+      
       // 立即阻止滾動，不論任何情況
       e.preventDefault()
       e.stopPropagation()
@@ -469,12 +494,14 @@ export function AvailabilityCalendar({
   const pointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== 'touch') return
 
+    // 清理長按計時器
+    if (longPressTimerRef.current != null) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+
     // 若正在等待長按且未進入拖曳 => 當作單擊切換
-    if (awaitingLongPressRef.current && touchStartHitRef.current) {
-      if (longPressTimerRef.current != null) {
-        clearTimeout(longPressTimerRef.current)
-        longPressTimerRef.current = null
-      }
+    if (awaitingLongPressRef.current && touchStartHitRef.current && !isDraggingRef.current) {
       awaitingLongPressRef.current = false
       const hit = touchStartHitRef.current
       toggleSlot(hit.date, hit.hour)
@@ -489,6 +516,8 @@ export function AvailabilityCalendar({
       finishDrag()
     }
 
+    // 完全清理所有狀態
+    awaitingLongPressRef.current = false
     touchStartHitRef.current = null
     touchStartPointRef.current = null
   }
