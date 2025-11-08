@@ -57,6 +57,8 @@ export function AvailabilityCalendar({
   const awaitingLongPressRef = useRef(false)
   const touchStartPointRef = useRef<{ x: number; y: number } | null>(null)
   const touchStartHitRef = useRef<{ date: Date; hour: number } | null>(null)
+  // 避免行動裝置觸控結束後產生合成滑鼠事件，導致又被切換回去
+  const ignoreMouseUntilRef = useRef<number>(0)
 
   // 優先使用 selectedDates，否則用 startDate 到 endDate 的連續日期
   const dates: Date[] = selectedDates && selectedDates.length > 0 
@@ -184,6 +186,8 @@ export function AvailabilityCalendar({
   }
 
   const handleMouseDown = (date: Date, hour: number) => {
+    // 若剛經歷觸控事件，忽略隨後的合成滑鼠事件
+    if (Date.now() < ignoreMouseUntilRef.current) return
     // 桌面滑鼠立即進入拖曳
     startDragAt(date, hour)
   }
@@ -224,6 +228,8 @@ export function AvailabilityCalendar({
   // pointer 事件（手機）
   const pointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (readOnly || e.pointerType !== 'touch') return
+    // 設定一段時間忽略隨後的合成滑鼠事件
+    ignoreMouseUntilRef.current = Date.now() + 600
     const hit = getCellFromPoint(e.clientX, e.clientY)
     if (!hit) return
 
