@@ -247,17 +247,39 @@ export function AvailabilityCalendar({
 
   const startDragAt = (date: Date, hour: number) => {
     if (readOnly) return
+    
+    // 先設置所有狀態
     isDraggingRef.current = true // 立即設置 ref
     setIsDragging(true)
     setDragStart({ date, hour })
     touchedCellsRef.current = new Set()
     dragModeRef.current = isSlotSelectedBase(date, hour) ? "remove" : "add"
-    onSlotFocus?.(date, hour)
-    applyDragOnCell(date, hour)
-    // 進入拖曳模式時，完全禁用滾動
+    
+    // 完全禁用滾動（同步設置）
     if (containerRef.current) {
       containerRef.current.style.touchAction = 'none'
     }
+    
+    // 確認設置完成後才震動提示
+    try { 
+      if ((navigator as any)?.vibrate) {
+        (navigator as any).vibrate(10)
+      }
+    } catch {}
+    
+    // 顯示視覺提示
+    if (touchStartPointRef.current && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      setHint({ 
+        x: touchStartPointRef.current.x - rect.left, 
+        y: touchStartPointRef.current.y - rect.top, 
+        visible: true 
+      })
+      window.setTimeout(() => setHint((h) => ({ ...h, visible: false })), 600)
+    }
+    
+    onSlotFocus?.(date, hour)
+    applyDragOnCell(date, hour)
   }
 
   // 檢查並執行自動邊緣滾動
@@ -361,10 +383,17 @@ export function AvailabilityCalendar({
   // pointer 事件（手機）
   const pointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (readOnly || e.pointerType !== 'touch') return
-    // 設定一段時間忽略隨後的合成滑鼠事件
-    ignoreMouseUntilRef.current = Date.now() + 600
+    
     const hit = getCellFromPoint(e.clientX, e.clientY)
     if (!hit) return
+    
+    // 設定一段時間忽略隨後的合成滑鼠事件
+    ignoreMouseUntilRef.current = Date.now() + 600
+    
+    // 如果要啟用長按模式，需要先阻止預設行為（避免瀏覽器選取文字等）
+    if (longPressToDrag) {
+      e.preventDefault()
+    }
 
     touchStartPointRef.current = { x: e.clientX, y: e.clientY }
     touchStartHitRef.current = hit
@@ -374,14 +403,7 @@ export function AvailabilityCalendar({
       longPressTimerRef.current = window.setTimeout(() => {
         awaitingLongPressRef.current = false
         longPressTimerRef.current = null
-        // 震動提示（若支援）
-        try { (navigator as any)?.vibrate?.(10) } catch {}
-        // 顯示淡出提示圈
-        if (touchStartPointRef.current && containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect()
-          setHint({ x: touchStartPointRef.current.x - rect.left, y: touchStartPointRef.current.y - rect.top, visible: true })
-          window.setTimeout(() => setHint((h) => ({ ...h, visible: false })), 600)
-        }
+        // 啟動拖曳（內部會處理震動和視覺提示）
         startDragAt(hit.date, hit.hour)
       }, Math.max(200, Math.min(300, longPressDelayMs)))
     } else {
@@ -391,20 +413,24 @@ export function AvailabilityCalendar({
 
   const pointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (readOnly || e.pointerType !== 'touch') return
-    const hit = getCellFromPoint(e.clientX, e.clientY)
-
+    
     // 使用 ref 檢查拖曳狀態，立即生效
+    // 關鍵：必須在最前面就檢查並阻止預設行為
     if (isDraggingRef.current) {
+      // 立即阻止滾動，不論任何情況
+      e.preventDefault()
+      e.stopPropagation()
+      
+      const hit = getCellFromPoint(e.clientX, e.clientY)
       if (hit) {
         applyDragOnCell(hit.date, hit.hour)
       }
       // 檢查是否需要自動邊緣滾動
       checkAndAutoScroll(e.clientX, e.clientY)
-      // 防止拖曳時觸發瀏覽器的滾動
-      e.preventDefault()
-      e.stopPropagation()
       return
     }
+
+    const hit = getCellFromPoint(e.clientX, e.clientY)
 
     // 長按等待期間：若移動超過閾值則取消長按，允許滾動
     if (awaitingLongPressRef.current && touchStartPointRef.current) {
