@@ -408,12 +408,15 @@ export function AvailabilityCalendar({
     // 設定一段時間忽略隨後的合成滑鼠事件
     ignoreMouseUntilRef.current = Date.now() + 600
     
+    // 阻止預設行為，避免瀏覽器啟動滾動手勢
+    e.preventDefault()
+    
     // 記錄觸控起點
     touchStartPointRef.current = { x: e.clientX, y: e.clientY }
     touchStartHitRef.current = hit
     lastPointerIdRef.current = e.pointerId
     
-    // 不做任何事，等待 pointerMove 判斷是拖曳還是單擊
+    // 等待 pointerMove 判斷是拖曳還是單擊
   }
 
   const pointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
