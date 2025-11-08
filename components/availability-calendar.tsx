@@ -43,6 +43,8 @@ export function AvailabilityCalendar({
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState<{ date: Date; hour: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // 追蹤最新的 selectedSlots，避免 rAF/事件閉包讀到舊值
+  const selectedSlotsRef = useRef<TimeSlot[]>(selectedSlots)
   const dragModeRef = useRef<"add" | "remove" | null>(null)
   const touchedCellsRef = useRef<Set<string>>(new Set())
   const pendingAddRef = useRef<Set<string>>(new Set())
@@ -117,11 +119,12 @@ export function AvailabilityCalendar({
       const addKeys = pendingAddRef.current
       const addDetails = pendingAddDetailsRef.current
 
-      const selectedKeySet = new Set(selectedSlots.map((s) => `${s.date.toISOString().split("T")[0]}-${s.hour}`))
+      const base = selectedSlotsRef.current
+      const selectedKeySet = new Set(base.map((s) => `${s.date.toISOString().split("T")[0]}-${s.hour}`))
       const result: TimeSlot[] = []
 
       // 先保留原本但排除要移除的
-      for (const s of selectedSlots) {
+      for (const s of base) {
         const key = `${s.date.toISOString().split("T")[0]}-${s.hour}`
         if (!removeKeys.has(key)) {
           result.push(s)
@@ -186,6 +189,8 @@ export function AvailabilityCalendar({
   }
 
   const handleMouseDown = (date: Date, hour: number) => {
+    // 防止文字選取、避免 click 產生額外副作用
+    try { window.getSelection()?.removeAllRanges() } catch {}
     // 若剛經歷觸控事件，忽略隨後的合成滑鼠事件
     if (Date.now() < ignoreMouseUntilRef.current) return
     // 桌面滑鼠立即進入拖曳
@@ -211,6 +216,11 @@ export function AvailabilityCalendar({
     document.addEventListener("mouseup", handleGlobalMouseUp)
     return () => document.removeEventListener("mouseup", handleGlobalMouseUp)
   }, [])
+
+  // 追蹤最新的 selectedSlots 供 rAF 使用，避免閉包讀到舊值
+  useEffect(() => {
+    selectedSlotsRef.current = selectedSlots
+  }, [selectedSlots])
 
   // 由座標找到 cell
   const getCellFromPoint = (clientX: number, clientY: number): { date: Date; hour: number } | null => {
