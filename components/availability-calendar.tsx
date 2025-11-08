@@ -261,7 +261,11 @@ export function AvailabilityCalendar({
     touchedCellsRef.current = new Set()
     dragModeRef.current = isSlotSelectedBase(date, hour) ? "remove" : "add"
     
-    // 立即禁用所有觸控滾動
+    // 立即直接操作 DOM 禁用所有觸控滾動（不依賴 state）
+    if (containerRef.current) {
+      containerRef.current.style.touchAction = 'none'
+    }
+    // 同時更新 state 以保持一致性
     setCurrentTouchAction('none')
     
     // 震動提示（只震動一次）
@@ -348,7 +352,11 @@ export function AvailabilityCalendar({
     touchedCellsRef.current.clear()
     // 停止自動滾動
     stopAutoScroll()
-    // 恢復雙向觸控滾動
+    // 立即直接操作 DOM 恢復雙向觸控滾動（不依賴 state）
+    if (containerRef.current) {
+      containerRef.current.style.touchAction = 'pan-x pan-y'
+    }
+    // 同時更新 state 以保持一致性
     setCurrentTouchAction('pan-x pan-y')
     // 放手時提交（預覽模式亦在此提交）
     scheduleCommit()
@@ -433,6 +441,10 @@ export function AvailabilityCalendar({
           dragModeRef.current = null
           touchedCellsRef.current.clear()
           stopAutoScroll()
+            // 立即恢復滾動
+            if (containerRef.current) {
+              containerRef.current.style.touchAction = 'pan-x pan-y'
+            }
           setCurrentTouchAction('pan-x pan-y')
           // 不清除 touchStart，讓系統可以正常滾動
           return
