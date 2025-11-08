@@ -45,6 +45,7 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
   const [isDragging, setIsDragging] = useState(false)
   const dragStartIndex = useRef<number | null>(null)
   const originSelectionRef = useRef<Date[]>([])
+  const hasDragged = useRef(false)  // 追蹤是否真的拖曳過
 
   const toggleDate = (date: Date) => {
     const dateWithoutTime = new Date(date)
@@ -86,13 +87,12 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
     setIsDragging(true)
     dragStartIndex.current = index
     originSelectionRef.current = [...value]
-    // start by selecting the first cell
-    const range = [date]
-    onChange(uniqByDay([...originSelectionRef.current, ...range]).sort((a, b) => a.getTime() - b.getTime()))
+    hasDragged.current = false  // 重置拖曳標記
   }
 
   const handleMouseEnter = (index: number) => {
     if (!isDragging || dragStartIndex.current === null) return
+    hasDragged.current = true  // 標記為已拖曳
     const start = Math.min(dragStartIndex.current, index)
     const end = Math.max(dragStartIndex.current, index)
     const range = dates.slice(start, end + 1).filter((d) => !isBefore(d, today))
@@ -195,7 +195,11 @@ export function MultiDatePicker({ value, onChange }: MultiDatePickerProps) {
                   type="button"
                   onMouseDown={() => handleMouseDown(index)}
                   onMouseEnter={() => handleMouseEnter(index)}
-                  onClick={() => !isPast && toggleDate(date)}
+                  onClick={() => {
+                    if (!isPast && !hasDragged.current) {
+                      toggleDate(date)
+                    }
+                  }}
                   disabled={isPast}
                   className={`
                     aspect-square rounded-lg text-sm sm:text-base font-medium
