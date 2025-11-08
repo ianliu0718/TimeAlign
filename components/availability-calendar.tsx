@@ -43,7 +43,9 @@ export function AvailabilityCalendar({
   const [isDragging, setIsDragging] = useState(false)
   const isDraggingRef = useRef(false) // 用 ref 立即追蹤拖曳狀態
   const [dragStart, setDragStart] = useState<{ date: Date; hour: number } | null>(null)
-  const [currentTouchAction, setCurrentTouchAction] = useState<string>("pan-x pan-y")
+  // 改為只用 DOM 直接控制 touch-action，避免 React state 時序造成奇偶失敗
+  // const [currentTouchAction, setCurrentTouchAction] = useState<string>("pan-x pan-y")
+  const bodyOverflowPrevRef = useRef<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   // 追蹤最新的 selectedSlots，避免 rAF/事件閉包讀到舊值
   const selectedSlotsRef = useRef<TimeSlot[]>(selectedSlots)
@@ -261,12 +263,14 @@ export function AvailabilityCalendar({
     touchedCellsRef.current = new Set()
     dragModeRef.current = isSlotSelectedBase(date, hour) ? "remove" : "add"
     
-    // 立即直接操作 DOM 禁用所有觸控滾動（不依賴 state）
+    // 立即直接操作 DOM 禁用所有觸控滾動（不依賴 state） + 鎖定 body 滾動
     if (containerRef.current) {
       containerRef.current.style.touchAction = 'none'
     }
-    // 同時更新 state 以保持一致性
-    setCurrentTouchAction('none')
+    if (bodyOverflowPrevRef.current == null) {
+      bodyOverflowPrevRef.current = document.body.style.overflow || ''
+      document.body.style.overflow = 'hidden'
+    }
     
     // 震動提示（只震動一次）
     try { 
@@ -352,12 +356,15 @@ export function AvailabilityCalendar({
     touchedCellsRef.current.clear()
     // 停止自動滾動
     stopAutoScroll()
-    // 立即直接操作 DOM 恢復雙向觸控滾動（不依賴 state）
+    // 恢復觸控滾動
     if (containerRef.current) {
       containerRef.current.style.touchAction = 'pan-x pan-y'
     }
-    // 同時更新 state 以保持一致性
-    setCurrentTouchAction('pan-x pan-y')
+    // 恢復 body 滾動
+    if (bodyOverflowPrevRef.current != null) {
+  document.body.style.overflow = bodyOverflowPrevRef.current ?? ''
+      bodyOverflowPrevRef.current = null
+    }
     // 放手時提交（預覽模式亦在此提交）
     scheduleCommit()
   }
@@ -445,7 +452,13 @@ export function AvailabilityCalendar({
             if (containerRef.current) {
               containerRef.current.style.touchAction = 'pan-x pan-y'
             }
-          setCurrentTouchAction('pan-x pan-y')
+          if (containerRef.current) {
+            containerRef.current.style.touchAction = 'pan-x pan-y'
+          }
+          if (bodyOverflowPrevRef.current != null) {
+            document.body.style.overflow = bodyOverflowPrevRef.current ?? ''
+            bodyOverflowPrevRef.current = null
+          }
           // 不清除 touchStart，讓系統可以正常滾動
           return
         }
@@ -581,7 +594,7 @@ export function AvailabilityCalendar({
         <div
           ref={containerRef}
           className="inline-block min-w-full border rounded-lg overflow-hidden relative [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px] select-none"
-          style={{ minWidth: dates.length > 3 ? "720px" : "auto", touchAction: currentTouchAction }}
+          style={{ minWidth: dates.length > 3 ? "720px" : "auto" }}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
