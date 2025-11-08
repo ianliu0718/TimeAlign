@@ -43,6 +43,7 @@ export function AvailabilityCalendar({
   const [isDragging, setIsDragging] = useState(false)
   const isDraggingRef = useRef(false) // 用 ref 立即追蹤拖曳狀態
   const [dragStart, setDragStart] = useState<{ date: Date; hour: number } | null>(null)
+  const [currentTouchAction, setCurrentTouchAction] = useState<string>("pan-x pan-y")
   const containerRef = useRef<HTMLDivElement>(null)
   // 追蹤最新的 selectedSlots，避免 rAF/事件閉包讀到舊值
   const selectedSlotsRef = useRef<TimeSlot[]>(selectedSlots)
@@ -255,12 +256,10 @@ export function AvailabilityCalendar({
     touchedCellsRef.current = new Set()
     dragModeRef.current = isSlotSelectedBase(date, hour) ? "remove" : "add"
     
-    // 完全禁用滾動（同步設置）
-    if (containerRef.current) {
-      containerRef.current.style.touchAction = 'none'
-    }
+    // 立即禁用所有觸控滾動
+    setCurrentTouchAction('none')
     
-    // 確認設置完成後才震動提示
+    // 震動提示（只震動一次）
     try { 
       if ((navigator as any)?.vibrate) {
         (navigator as any).vibrate(10)
@@ -345,9 +344,7 @@ export function AvailabilityCalendar({
     // 停止自動滾動
     stopAutoScroll()
     // 恢復雙向觸控滾動
-    if (containerRef.current) {
-      containerRef.current.style.touchAction = 'pan-x pan-y'
-    }
+    setCurrentTouchAction('pan-x pan-y')
     // 放手時提交（預覽模式亦在此提交）
     scheduleCommit()
   }
@@ -436,8 +433,10 @@ export function AvailabilityCalendar({
     if (awaitingLongPressRef.current && touchStartPointRef.current) {
       const dx = Math.abs(e.clientX - touchStartPointRef.current.x)
       const dy = Math.abs(e.clientY - touchStartPointRef.current.y)
+      
       // 優先判斷垂直滾動意圖（網頁滾動）：垂直移動 > 5px 且大於水平移動
       if (dy > 5 && dy > dx) {
+        // 明確的垂直滾動意圖，取消長按
         if (longPressTimerRef.current != null) {
           clearTimeout(longPressTimerRef.current)
           longPressTimerRef.current = null
@@ -445,8 +444,10 @@ export function AvailabilityCalendar({
         awaitingLongPressRef.current = false
         touchStartHitRef.current = null
         touchStartPointRef.current = null
+        // 允許滾動
         return
       }
+      
       // 其他方向移動超過 8px 也取消
       if (dx > 8 || dy > 8) {
         if (longPressTimerRef.current != null) {
@@ -456,7 +457,12 @@ export function AvailabilityCalendar({
         awaitingLongPressRef.current = false
         touchStartHitRef.current = null
         touchStartPointRef.current = null
+        // 允許滾動
+        return
       }
+      
+      // 還在等待長按，且移動距離不大：阻止預設行為（防止瀏覽器開始滾動）
+      e.preventDefault()
     }
   }
 
@@ -534,7 +540,7 @@ export function AvailabilityCalendar({
         <div
           ref={containerRef}
           className="inline-block min-w-full border rounded-lg overflow-hidden relative [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px] select-none"
-          style={{ minWidth: dates.length > 3 ? "720px" : "auto", touchAction: "pan-x pan-y" }}
+          style={{ minWidth: dates.length > 3 ? "720px" : "auto", touchAction: currentTouchAction }}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
