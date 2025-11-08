@@ -41,6 +41,7 @@ export function AvailabilityCalendar({
 }: AvailabilityCalendarProps) {
   const { t } = useLanguage()
   const [isDragging, setIsDragging] = useState(false)
+  const isDraggingRef = useRef(false) // 用 ref 立即追蹤拖曳狀態
   const [dragStart, setDragStart] = useState<{ date: Date; hour: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   // 追蹤最新的 selectedSlots，避免 rAF/事件閉包讀到舊值
@@ -246,6 +247,7 @@ export function AvailabilityCalendar({
 
   const startDragAt = (date: Date, hour: number) => {
     if (readOnly) return
+    isDraggingRef.current = true // 立即設置 ref
     setIsDragging(true)
     setDragStart({ date, hour })
     touchedCellsRef.current = new Set()
@@ -313,6 +315,7 @@ export function AvailabilityCalendar({
   }
 
   const finishDrag = () => {
+    isDraggingRef.current = false // 立即清除 ref
     setIsDragging(false)
     setDragStart(null)
     dragModeRef.current = null
@@ -390,7 +393,8 @@ export function AvailabilityCalendar({
     if (readOnly || e.pointerType !== 'touch') return
     const hit = getCellFromPoint(e.clientX, e.clientY)
 
-    if (isDragging) {
+    // 使用 ref 檢查拖曳狀態，立即生效
+    if (isDraggingRef.current) {
       if (hit) {
         applyDragOnCell(hit.date, hit.hour)
       }
@@ -398,6 +402,7 @@ export function AvailabilityCalendar({
       checkAndAutoScroll(e.clientX, e.clientY)
       // 防止拖曳時觸發瀏覽器的滾動
       e.preventDefault()
+      e.stopPropagation()
       return
     }
 
@@ -448,7 +453,7 @@ export function AvailabilityCalendar({
     }
 
     // 正在拖曳：結束並提交
-    if (isDragging) {
+    if (isDraggingRef.current) {
       finishDrag()
     }
 
