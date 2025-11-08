@@ -427,6 +427,11 @@ export function AvailabilityCalendar({
   lastPointerIdRef.current = e.pointerId
 
     if (longPressToDrag) {
+      // 立即鎖定觸控滾動並捕獲指標，避免瀏覽器在等待期間介入手勢協商
+      if (containerRef.current) {
+        containerRef.current.style.touchAction = 'none'
+        try { containerRef.current.setPointerCapture(e.pointerId) } catch {}
+      }
       awaitingLongPressRef.current = true
       dragPhaseRef.current = "pending"
       longPressTimerRef.current = window.setTimeout(() => {
@@ -434,9 +439,6 @@ export function AvailabilityCalendar({
         if (!awaitingLongPressRef.current || dragPhaseRef.current !== 'pending') return
         awaitingLongPressRef.current = false
         longPressTimerRef.current = null
-        if (containerRef.current) {
-          try { containerRef.current.setPointerCapture(lastPointerIdRef.current) } catch {}
-        }
         startDragAt(hit.date, hit.hour)
       }, Math.max(200, Math.min(300, longPressDelayMs)))
     } else {
@@ -525,6 +527,11 @@ export function AvailabilityCalendar({
 
     // 若正在等待長按且未進入拖曳 => 當作單擊切換
     if (dragPhaseRef.current === 'pending' && awaitingLongPressRef.current && touchStartHitRef.current && !isDraggingRef.current) {
+      // 釋放鎖定與捕獲（因為本次為單擊行為）
+      if (containerRef.current) {
+        try { containerRef.current.releasePointerCapture(lastPointerIdRef.current) } catch {}
+        containerRef.current.style.touchAction = 'pan-x pan-y'
+      }
       awaitingLongPressRef.current = false
       dragPhaseRef.current = 'idle'
       const hit = touchStartHitRef.current
