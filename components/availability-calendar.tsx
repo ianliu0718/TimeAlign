@@ -149,6 +149,28 @@ export function AvailabilityCalendar({
     }
   }
 
+  // 全選/取消全選
+  const toggleAllSlots = () => {
+    if (readOnly || !onSlotsChange) return
+    // 檢查是否所有時段都已選擇
+    const totalSlots = dates.length * hours.length
+    const allSelected = selectedSlots.length === totalSlots
+    
+    if (allSelected) {
+      // 全部取消
+      onSlotsChange([])
+    } else {
+      // 全部選擇
+      const allSlots: TimeSlot[] = []
+      dates.forEach(date => {
+        hours.forEach(hour => {
+          allSlots.push({ date: new Date(date), hour })
+        })
+      })
+      onSlotsChange(allSlots)
+    }
+  }
+
   const scheduleCommit = () => {
     if (!onSlotsChange) return
     // 預覽模式中拖曳時不提交，等放手再一次性提交
@@ -226,6 +248,10 @@ export function AvailabilityCalendar({
     dragModeRef.current = isSlotSelectedBase(date, hour) ? "remove" : "add"
     onSlotFocus?.(date, hour)
     applyDragOnCell(date, hour)
+    // 進入拖曳模式時，禁用垂直滾動但保留水平滾動
+    if (containerRef.current) {
+      containerRef.current.style.touchAction = 'pan-x'
+    }
   }
 
   const handleMouseDown = (date: Date, hour: number) => {
@@ -247,6 +273,10 @@ export function AvailabilityCalendar({
     setDragStart(null)
     dragModeRef.current = null
     touchedCellsRef.current.clear()
+    // 恢復雙向觸控滾動
+    if (containerRef.current) {
+      containerRef.current.style.touchAction = 'pan-x pan-y'
+    }
     // 放手時提交（預覽模式亦在此提交）
     scheduleCommit()
   }
@@ -376,8 +406,29 @@ export function AvailabilityCalendar({
 
   const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
 
+  const totalSlots = dates.length * hours.length
+  const allSelected = selectedSlots.length === totalSlots
+
   return (
     <div className="w-full max-w-full lg:max-w-5xl mx-auto">
+      {/* 全選/取消全選按鈕 */}
+      {!readOnly && onSlotsChange && (
+        <div className="mb-3 flex items-center justify-between">
+          <button
+            onClick={toggleAllSlots}
+            className="px-4 py-2 text-sm font-medium rounded-md border transition-colors hover:bg-muted"
+            title={allSelected ? "點擊取消所有時段" : "點擊選擇所有時段"}
+          >
+            {allSelected ? "✓ 取消全選" : "全選所有時段"}
+          </button>
+          {selectedSlots.length > 0 && (
+            <span className="text-sm text-muted-foreground">
+              已選擇 {selectedSlots.length} / {totalSlots} 個時段
+            </span>
+          )}
+        </div>
+      )}
+
       {heatmapData && (
         <div className="mb-4 flex items-center gap-4 text-sm flex-wrap">
           <span className="font-medium">{t("calendar.availability")}:</span>
@@ -400,7 +451,7 @@ export function AvailabilityCalendar({
         <div
           ref={containerRef}
           className="inline-block min-w-full border rounded-lg overflow-hidden relative [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px] select-none"
-          style={{ minWidth: dates.length > 3 ? "720px" : "auto", touchAction: "pan-y" }}
+          style={{ minWidth: dates.length > 3 ? "720px" : "auto", touchAction: "pan-x pan-y" }}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
