@@ -1,9 +1,11 @@
 import type React from "react"
 import { Inter } from "next/font/google"
+import Script from "next/script"
 import "./globals.css"
 import { Providers } from "@/components/providers"
 import { Toaster } from "@/components/ui/toaster"
 import { Header } from "@/components/header"
+import { AdBanner } from "@/components/ad-banner"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,11 +22,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Google AdSense site-wide script (loads on every page, in head) */}
+        <Script
+          id="adsense-global"
+          async
+          strategy="beforeInteractive"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6485506879625570"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className={inter.className}>
         <Providers>
           <div className="min-h-screen flex flex-col">
             <Header />
-            <main className="flex-1">{children}</main>
+            <main className="flex-1 pb-12">{children}</main>
+            <AdBanner />
             <Toaster />
           </div>
         </Providers>
