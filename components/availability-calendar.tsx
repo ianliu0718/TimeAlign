@@ -75,6 +75,26 @@ export function AvailabilityCalendar({
   const dragPhaseRef = useRef<"idle" | "pending" | "dragging">("idle")
   // 指標 ID（pointer capture 用）
   const lastPointerIdRef = useRef<number>(0)
+  // 拖曳中全面阻止頁面觸控捲動（iOS/Safari 安全網）
+  const touchMoveBlockInstalledRef = useRef(false)
+  const preventTouchMove = (e: TouchEvent) => {
+    // 僅在拖曳中才阻止，避免影響一般模式
+    if (isDraggingRef.current && dragPhaseRef.current === 'dragging') {
+      e.preventDefault()
+    }
+  }
+  const installGlobalTouchBlock = () => {
+    if (!touchMoveBlockInstalledRef.current) {
+      window.addEventListener('touchmove', preventTouchMove, { passive: false })
+      touchMoveBlockInstalledRef.current = true
+    }
+  }
+  const uninstallGlobalTouchBlock = () => {
+    if (touchMoveBlockInstalledRef.current) {
+      window.removeEventListener('touchmove', preventTouchMove as any)
+      touchMoveBlockInstalledRef.current = false
+    }
+  }
 
   // 優先使用 selectedDates，否則用 startDate 到 endDate 的連續日期
   const dates: Date[] = selectedDates && selectedDates.length > 0 
@@ -271,10 +291,17 @@ export function AvailabilityCalendar({
       try { if (lastPointerIdRef.current) containerRef.current.setPointerCapture(lastPointerIdRef.current) } catch {}
       containerRef.current.style.touchAction = 'none'
     }
+    // 阻止捲動鏈與全域觸控捲動（Safari 安全網）
+    if (scrollContainerRef.current) {
+      try {
+        scrollContainerRef.current.style.setProperty('overscroll-behavior', 'contain')
+      } catch {}
+    }
     if (bodyOverflowPrevRef.current == null) {
       bodyOverflowPrevRef.current = document.body.style.overflow || ''
       document.body.style.overflow = 'hidden'
     }
+    installGlobalTouchBlock()
     
     // 震動提示
     try { 
@@ -365,11 +392,15 @@ export function AvailabilityCalendar({
       containerRef.current.style.touchAction = 'pan-x pan-y'
       try { containerRef.current.releasePointerCapture(lastPointerIdRef.current) } catch {}
     }
+    if (scrollContainerRef.current) {
+      try { scrollContainerRef.current.style.removeProperty('overscroll-behavior') } catch {}
+    }
     // 恢復 body 滾動
     if (bodyOverflowPrevRef.current != null) {
   document.body.style.overflow = bodyOverflowPrevRef.current ?? ''
       bodyOverflowPrevRef.current = null
     }
+    uninstallGlobalTouchBlock()
     // 放手時提交（預覽模式亦在此提交）
     scheduleCommit()
   }
@@ -504,11 +535,15 @@ export function AvailabilityCalendar({
         try { containerRef.current.releasePointerCapture(lastPointerIdRef.current) } catch {}
         containerRef.current.style.touchAction = 'pan-x pan-y'
       }
+      if (scrollContainerRef.current) {
+        try { scrollContainerRef.current.style.removeProperty('overscroll-behavior') } catch {}
+      }
       if (bodyOverflowPrevRef.current != null) {
         document.body.style.overflow = bodyOverflowPrevRef.current ?? ''
         bodyOverflowPrevRef.current = null
       }
     }
+    uninstallGlobalTouchBlock()
     dragPhaseRef.current = 'idle'
     touchStartHitRef.current = null
     touchStartPointRef.current = null
@@ -561,7 +596,8 @@ export function AvailabilityCalendar({
         <div
           ref={containerRef}
           className="inline-block min-w-full border rounded-lg overflow-hidden relative [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px] select-none"
-          style={{ minWidth: dates.length > 3 ? "720px" : "auto", ['--slot-h' as any]: 'clamp(22px, 5.5vw, 44px)' }}
+          // slot 高度再縮小約 15%：原先最小 22px -> 19px；中段 5.5vw -> 4.7vw；維持最大 44px
+          style={{ minWidth: dates.length > 3 ? "720px" : "auto", ['--slot-h' as any]: 'clamp(19px, 4.7vw, 44px)' }}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
