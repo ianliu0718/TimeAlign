@@ -57,7 +57,11 @@ export function AvailabilityCalendar({
   const rafIdRef = useRef<number | null>(null)
   // 視覺提示（拖曳啟動時）
   const [hint, setHint] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false })
-
+  
+  // 手機觸控與長按
+  const longPressTimerRef = useRef<number | null>(null)
+  const awaitingLongPressRef = useRef(false)
+  const LONG_PRESS_MS = 500
   // 手機觸控起點與命中資訊
   const touchStartPointRef = useRef<{ x: number; y: number } | null>(null)
   const touchStartHitRef = useRef<{ date: Date; hour: number } | null>(null)
@@ -67,8 +71,8 @@ export function AvailabilityCalendar({
   // 自動邊緣滾動
   const autoScrollIntervalRef = useRef<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  // 拖曳階段：idle（待機）| dragging（拖曳中）
-  const dragPhaseRef = useRef<"idle" | "dragging">("idle")
+  // 拖曳階段：idle（待機）| pending（長按等待）| dragging（拖曳中）
+  const dragPhaseRef = useRef<"idle" | "pending" | "dragging">("idle")
   // 指標 ID（pointer capture 用）
   const lastPointerIdRef = useRef<number>(0)
 
@@ -407,71 +411,82 @@ export function AvailabilityCalendar({
     
     // 設定一段時間忽略隨後的合成滑鼠事件
     ignoreMouseUntilRef.current = Date.now() + 600
-    
-    // 阻止預設行為，避免瀏覽器啟動滾動手勢
-    e.preventDefault()
-    
+
     // 記錄觸控起點
     touchStartPointRef.current = { x: e.clientX, y: e.clientY }
     touchStartHitRef.current = hit
     lastPointerIdRef.current = e.pointerId
+
+    // 進入長按等待階段（不阻止預設行為，讓一般滾動可用）
+    awaitingLongPressRef.current = true
+    dragPhaseRef.current = 'pending'
+    if (longPressTimerRef.current != null) {
+      clearTimeout(longPressTimerRef.current)
+    }
+    longPressTimerRef.current = window.setTimeout(() => {
+      // 尚在等待中才啟動拖曳
+      if (!awaitingLongPressRef.current || dragPhaseRef.current !== 'pending' || !touchStartHitRef.current) return
+      // 捕獲指標並鎖定觸控滾動
+      if (containerRef.current) {
+        try { if (lastPointerIdRef.current) containerRef.current.setPointerCapture(lastPointerIdRef.current) } catch {}
+        containerRef.current.style.touchAction = 'none'
+      }
+      startDragAt(touchStartHitRef.current.date, touchStartHitRef.current.hour)
+    }, LONG_PRESS_MS)
     
-    // 等待 pointerMove 判斷是拖曳還是單擊
+    // 等待 pointerMove / pointerUp 決定後續
   }
 
   const pointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (readOnly || e.pointerType !== 'touch') return
-    
-    // 已在拖曳中：持續塗抹
+    // 拖曳中：持續塗抹
     if (isDraggingRef.current && dragPhaseRef.current === 'dragging') {
       e.preventDefault()
-      e.stopPropagation()
-      
       const hit = getCellFromPoint(e.clientX, e.clientY)
-      if (hit) {
-        applyDragOnCell(hit.date, hit.hour)
-      }
-      // 檢查是否需要自動邊緣滾動
+      if (hit) applyDragOnCell(hit.date, hit.hour)
       checkAndAutoScroll(e.clientX, e.clientY)
       return
     }
 
-    // 尚未啟動拖曳，檢查移動距離
-    if (touchStartPointRef.current && touchStartHitRef.current && !isDraggingRef.current) {
+    // 長按等待中：只要移動幅度明顯（任一方向 > 8px）就視為滾動/瀏覽意圖，取消長按，保留一般模式（可上下或水平捲動）
+    if (dragPhaseRef.current === 'pending' && awaitingLongPressRef.current && touchStartPointRef.current) {
       const dx = Math.abs(e.clientX - touchStartPointRef.current.x)
       const dy = Math.abs(e.clientY - touchStartPointRef.current.y)
-      
-      // 移動超過 5px：進入拖曳模式
-      if (dx >= 5 || dy >= 5) {
-        e.preventDefault()
-        e.stopPropagation()
-        startDragAt(touchStartHitRef.current.date, touchStartHitRef.current.hour)
+      if (dx > 8 || dy > 8) {
+        awaitingLongPressRef.current = false
+        dragPhaseRef.current = 'idle'
+        if (longPressTimerRef.current != null) {
+          clearTimeout(longPressTimerRef.current)
+          longPressTimerRef.current = null
+        }
+        touchStartPointRef.current = null
+        touchStartHitRef.current = null
+        return
       }
+      // 位移很小：保持等待，不阻止捲動
+      return
     }
   }
 
   const pointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== 'touch') return
+    // 清理長按計時
+    if (longPressTimerRef.current != null) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
 
-    // 正在拖曳：結束並提交
     if (isDraggingRef.current && dragPhaseRef.current === 'dragging') {
       finishDrag()
-      touchStartHitRef.current = null
-      touchStartPointRef.current = null
-      return
+    } else if (dragPhaseRef.current === 'pending' && awaitingLongPressRef.current) {
+      // 快速點擊 => 單一切換
+      if (touchStartHitRef.current) {
+        toggleSlot(touchStartHitRef.current.date, touchStartHitRef.current.hour)
+        onSlotFocus?.(touchStartHitRef.current.date, touchStartHitRef.current.hour)
+      }
     }
 
-    // 未進入拖曳（移動距離 < 5px）=> 當作單擊切換
-    if (touchStartHitRef.current && !isDraggingRef.current) {
-      const hit = touchStartHitRef.current
-      toggleSlot(hit.date, hit.hour)
-      onSlotFocus?.(hit.date, hit.hour)
-      touchStartHitRef.current = null
-      touchStartPointRef.current = null
-      return
-    }
-
-    // 清理
+    awaitingLongPressRef.current = false
     dragPhaseRef.current = 'idle'
     touchStartHitRef.current = null
     touchStartPointRef.current = null
@@ -546,7 +561,7 @@ export function AvailabilityCalendar({
         <div
           ref={containerRef}
           className="inline-block min-w-full border rounded-lg overflow-hidden relative [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px] select-none"
-          style={{ minWidth: dates.length > 3 ? "720px" : "auto" }}
+          style={{ minWidth: dates.length > 3 ? "720px" : "auto", ['--slot-h' as any]: 'clamp(22px, 5.5vw, 44px)' }}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
@@ -614,7 +629,7 @@ export function AvailabilityCalendar({
                     <div
                       key={`${i}-${hour}`}
                       className={cn(
-                        "border-b border-r p-1 sm:p-1.5 lg:p-1 cursor-pointer transition-colors min-h-[28px] sm:min-h-[34px] lg:min-h-[28px] relative",
+                        "border-b border-r p-1 cursor-pointer transition-colors relative",
                         readOnly && "cursor-default",
                         !readOnly && "hover:bg-accent",
                         selected && !showHeatmap && "bg-primary/60 md:bg-primary/40 hover:bg-primary/50 ring-2 ring-primary/80",
@@ -623,7 +638,7 @@ export function AvailabilityCalendar({
                         previewAdd && !baseSelected && "ring-2 ring-dashed ring-primary/80",
                         previewRemove && baseSelected && "ring-2 ring-dashed ring-red-500/80"
                       )}
-                      style={showHeatmap && !selected ? { opacity: 0.2 + intensity * 0.8 } : undefined}
+                      style={{ minHeight: 'var(--slot-h)', ...(showHeatmap && !selected ? { opacity: 0.2 + intensity * 0.8 } : {}) }}
                       data-date-idx={i}
                       data-hour={hour}
                       onMouseDown={() => handleMouseDown(date, hour)}
