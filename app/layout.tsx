@@ -5,7 +5,6 @@ import "./globals.css"
 import { Providers } from "@/components/providers"
 import { Toaster } from "@/components/ui/toaster"
 import { Header } from "@/components/header"
-import { AdBanner } from "@/components/ad-banner"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -37,8 +36,7 @@ export default function RootLayout({
         <Providers>
           <div className="min-h-screen flex flex-col">
             <Header />
-            <main className="flex-1 pb-12">{children}</main>
-            <AdBanner />
+            <main className="flex-1">{children}</main>
             <Toaster />
           </div>
         </Providers>
