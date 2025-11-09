@@ -8,7 +8,7 @@
 ```
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=你的VAPID公鑰
 VAPID_PRIVATE_KEY=你的VAPID私鑰
-PUSH_APP_NAME=TimeAlign
+PUSH_APP_NAME=ScheduleTime
 SUPABASE_SERVICE_ROLE_KEY=（可選，用於伺服端 upsert push_subscriptions）
 ```
 
@@ -101,3 +101,14 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Languages
+
+This app (ScheduleTime) currently supports 4 languages:
+
+- English (`en`)
+- 繁體中文 (`zh-TW`)
+- Español (`es`)
+- Tagalog (`tl`)
+
+To change the default language at first load, the app auto-detects the browser language and falls back to English.
