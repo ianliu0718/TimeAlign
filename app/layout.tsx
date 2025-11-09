@@ -23,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="google-adsense-account" content="ca-pub-6485506879625570" />
         {/* Google AdSense site-wide script (loads on every page, in head) */}
         <Script
           id="adsense-global"
