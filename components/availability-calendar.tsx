@@ -447,6 +447,10 @@ export function AvailabilityCalendar({
     touchStartPointRef.current = { x: e.clientX, y: e.clientY }
     touchStartHitRef.current = hit
     lastPointerIdRef.current = e.pointerId
+    // 先行捕獲 pointer，確保後續 move/up 都回到容器（不影響滾動，僅事件路由更穩定）
+    if (containerRef.current) {
+      try { containerRef.current.setPointerCapture(e.pointerId) } catch {}
+    }
 
     // 進入長按等待階段（不阻止預設行為，讓一般滾動可用）
     awaitingLongPressRef.current = true
@@ -549,6 +553,11 @@ export function AvailabilityCalendar({
     touchStartPointRef.current = null
   }
 
+  // 避免行動裝置長按彈出系統選單影響第一次啟動
+  const preventContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+  }
+
   const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
 
   const totalSlots = dates.length * hours.length
@@ -597,11 +606,16 @@ export function AvailabilityCalendar({
           ref={containerRef}
           className="inline-block min-w-full border rounded-lg overflow-hidden relative [--time-col:56px] md:[--time-col:56px] lg:[--time-col:48px] select-none"
           // 還原為非正方形樣式，透過高度變數控制每列高度
-          style={{ minWidth: dates.length > 3 ? "720px" : "auto", ['--slot-h' as any]: 'clamp(22px, 5.5vw, 44px)' }}
+          style={{ 
+            minWidth: dates.length > 3 ? "560px" : "auto",
+            ['--slot-h' as any]: 'clamp(22px, 5.5vw, 44px)',
+            ['--col-w' as any]: 'clamp(56px, 9vw, 72px)'
+          }}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
           onPointerCancel={pointerCancel}
+          onContextMenu={preventContextMenu}
         >
           {/* 長按進入拖曳的淡出提示圈 */}
           {hint.visible && (
@@ -613,7 +627,7 @@ export function AvailabilityCalendar({
             </div>
           )}
 
-          <div className="grid" style={{ gridTemplateColumns: `var(--time-col) repeat(${dates.length}, 1fr)` }}>
+          <div className="grid" style={{ gridTemplateColumns: `var(--time-col) repeat(${dates.length}, var(--col-w))` }}>
             <div className="bg-muted border-b border-r p-2 text-xs font-medium sticky left-0 z-10" />
             {dates.map((date, i) => {
               const allSelected = hours.every(h => isSlotSelectedBase(date, h))
